@@ -25,6 +25,7 @@
     "test:coverage": "vitest run --coverage",
     "release:package": "node scripts/package-release.mjs",
     "release:version": "node scripts/sync-version.mjs",
+    "test:install": "node scripts/simulate-install.mjs",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

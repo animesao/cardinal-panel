@@ -30,7 +30,9 @@ const OUTPUT_DIR = path.join(ROOT, '.output');
 
 /** Что попадает в пакет: путь внутри архива → источник. */
 const PAYLOAD = [
-  ['output/', OUTPUT_DIR],
+  // Точка в имени обязательна: Nitro ищет сборку по пути .output/, а
+  // install.sh кладёт её именно туда.
+  ['.output/', OUTPUT_DIR],
   ['scripts/', path.join(ROOT, 'scripts')],
   ['packaging/', path.join(ROOT, 'packaging')],
   ['server/db/migrations/', path.join(ROOT, 'server', 'db', 'migrations')],

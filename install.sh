@@ -204,11 +204,13 @@ log "Installing to $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$CONF_DIR"
 
 # Старый .output заменяем целиком, чтобы не осталось мёртвых чанков.
-rm -rf "${INSTALL_DIR}/.output" "${INSTALL_DIR}/scripts" "${INSTALL_DIR}/server"
+rm -rf "${INSTALL_DIR}/.output" "${INSTALL_DIR}/scripts" "${INSTALL_DIR}/server" "${INSTALL_DIR}/packaging"
 tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "$TMP_DIR"
 mv "${TMP_DIR}/cardinal-panel/.output" "$INSTALL_DIR/.output"
 mv "${TMP_DIR}/cardinal-panel/scripts" "$INSTALL_DIR/scripts"
 mv "${TMP_DIR}/cardinal-panel/server" "$INSTALL_DIR/server"
+# systemd-юнит лежит в пакете — без него install.sh не поставит сервис.
+mv "${TMP_DIR}/cardinal-panel/packaging" "$INSTALL_DIR/packaging"
 cp "${TMP_DIR}/cardinal-panel/package.json" "$INSTALL_DIR/package.json"
 cp "${TMP_DIR}/cardinal-panel/VERSION" "$INSTALL_DIR/VERSION"
 [[ -f "${TMP_DIR}/cardinal-panel/.env.example" ]] && cp "${TMP_DIR}/cardinal-panel/.env.example" "$INSTALL_DIR/.env.example"

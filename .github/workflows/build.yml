@@ -41,6 +41,9 @@ jobs:
       - name: package release artifacts
         run: npm run release:package
 
+      - name: simulate install (раскладка файлов после установки)
+        run: npm run test:install
+
       - name: dependency audit (production)
         # Гейт по critical для production-зависимостей: именно они попадают
         # в релиз. Оставшиеся high — build-инструментарий (tailwind, vite,
