@@ -31,18 +31,19 @@ for (const file of tracked) {
 }
 
 // 2. Значения, похожие на секреты: присваивание литерала непустой строки.
+//    Шаблонные подстановки (${VAR}) исключены — это переменная, а не секрет.
 const secretPatterns = [
   {
     name: 'NEXTAUTH_SECRET с литералом',
-    regex: /NEXTAUTH_SECRET\s*[=:]\s*['"][^'"\s]{8,}['"]/g,
+    regex: /NEXTAUTH_SECRET\s*[=:]\s*['"](?![^'"]*\$\{)[^'"\s]{8,}['"]/g,
   },
   {
     name: 'DB_PASSWORD с литералом',
-    regex: /DB_PASSWORD\s*[=:]\s*['"][^'"\s]{4,}['"]/g,
+    regex: /DB_PASSWORD\s*[=:]\s*['"](?![^'"]*\$\{)[^'"\s]{4,}['"]/g,
   },
   {
     name: 'GITHUB_TOKEN с литералом',
-    regex: /GITHUB_TOKEN\s*[=:]\s*['"][^'"\s]{8,}['"]/g,
+    regex: /GITHUB_TOKEN\s*[=:]\s*['"](?![^'"]*\$\{)[^'"\s]{8,}['"]/g,
   },
   {
     name: 'похожий на GitHub-токен',
