@@ -342,6 +342,9 @@ curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/instal
 | `--port <порт>` | порт панели (по умолчанию 3000) |
 | `--no-start` | установить, но не запускать |
 | `--uninstall` | снести панель (данные БД сохраняются, `KEEP_DATA=1` — удалить) |
+| `--install-mode <cardinal\|systemd>` | способ развёртывания (по умолчанию `systemd`) |
+| `--network <host\|bridge>` | сетевой режим контейнера в режиме `cardinal` |
+| `--image-tag <тег>` | тег собираемого образа в режиме `cardinal` |
 
 После установки:
 
@@ -353,6 +356,58 @@ journalctl -u cardinal-panel -f                   # логи
 Панель слушает `127.0.0.1:3000` — публичный адрес задаётся в
 `/etc/cardinal-panel/panel.env` (`NUXT_PANEL_URL`) и проксируется
 nginx/Caddy.
+
+### Развёртывание на runtime cardinal
+
+Панель — обычный контейнер, поэтому её можно развернуть не только как
+системный сервис, но и **контейнером на самом cardinal**. Образ собирается
+из того же релизного пакета (`Dockerfile.cardinal`, одна стадия: сборка
+`.output` уже готова, native-модулей нет — образ переносим между машинами).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/install.sh | sudo bash -s -- --install-mode cardinal
+```
+
+Что делает установщик в этом режиме:
+
+1. проверяет, что `cardinal` установлен (иначе подсказывает команду);
+2. тянет базовый образ `node:24-alpine`;
+3. собирает образ `cardinal-panel:<версия>` через `cardinal build`;
+4. пишет `/etc/cardinal-panel/cardinal.toml` и поднимает сервис через
+   `cardinal up`;
+5. выполняет миграции БД **внутри контейнера** (`cardinal exec`);
+6. ждёт ответа `/api/health`;
+7. включает boot-восстановление (`cardinal bootstrap --install`), чтобы
+   контейнер пережил перезагрузку хоста.
+
+Ключи этого режима:
+
+| Ключ | Назначение |
+|---|---|
+| `--install-mode cardinal` | развернуть контейнером на cardinal (по умолчанию `systemd`) |
+| `--network host` (по умолчанию) | панель видит `cardinal-wings` на `127.0.0.1:8080` и SFTP на `:2022` |
+| `--network bridge` | панель изолирована; узлы wings указываются в админке по IP хоста |
+| `--image-tag <тег>` | собрать образ с другим тегом (по умолчанию `cardinal-panel:<версия>`) |
+
+Файлы после установки:
+
+```
+/etc/cardinal-panel/panel.env     # секреты (0600), общий для обоих режимов
+/etc/cardinal-panel/cardinal.toml  # описание сервиса для cardinal
+```
+
+Управление:
+
+```bash
+cardinal ps                        # статус
+cardinal logs panel                # логи
+cardinal down -f /etc/cardinal-panel/cardinal.toml   # остановить
+./install.sh --uninstall            # снести (данные в томе panel-data сохраняются)
+```
+
+Если runtime работает со строгим allowlist реестров
+(`CARDINAL_REGISTRY_STRICT=1`), нужно разрешить Docker Hub:
+`cardinal registry allowlist add docker.io`.
 
 ### Docker
 

@@ -1,0 +1,25 @@
+# cardinal-panel на runtime cardinal.
+#
+# Файл создаётся установщиком (install.sh --install-mode cardinal) в
+# /etc/cardinal-panel/cardinal.toml с подставленными значениями.
+#
+# Запуск:
+#   cardinal up -f /etc/cardinal-panel/cardinal.toml
+#   cardinal down -f /etc/cardinal-panel/cardinal.toml
+#
+# network_mode = "host" — панель должна видеть cardinal-wings на
+# 127.0.0.1:8080 и SFTP на :2022; в мосте эти адреса указывают внутрь
+# контейнера и недоступны. В режиме bridge укажите в panel.env адрес узла
+# wings по IP хоста (NUXT_PANEL_URL / узлы в админке).
+
+[container.panel]
+image = "cardinal-panel:0.1.0"
+network_mode = "host"
+env_file = ["/etc/cardinal-panel/panel.env"]
+volumes = ["panel-data:/app/data"]
+restart = "always"
+user = "10001:10001"
+cap_drop = ["ALL"]
+no_new_privs = true
+healthcheck = { cmd = "wget -q -O- http://127.0.0.1:3000/api/health || exit 1", interval = 30, retries = 3, timeout = 5 }
+labels = { app = "cardinal-panel", managed-by = "cardinal-panel-install" }

@@ -1,0 +1,44 @@
+# cardinal-panel — образ для runtime cardinal (не Docker).
+#
+#   cardinal build -t cardinal-panel:0.1.0 -f Dockerfile.cardinal .
+#
+# В отличие от Dockerfile (Docker/OCI) здесь одна стадия: сборка .output уже
+# сделана заранее (на CI или в релизном пакете), а native-модулей в .output
+# нет — .output/server/node_modules содержит только JS. Значит образ
+# переносим между машинами без пересборки.
+#
+# Требования к хосту: cardinal с поддержкой overlayfs, cgroups v2 и
+# namespaces; образ node:24-alpine должен быть доступен (cardinal тянет его
+# сам при сборке).
+
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Раскладка из релизного пакета cardinal-panel-<version>.tar.gz
+# (каталог называется .output/ — с точкой, как его кладёт Nitro).
+COPY .output/ ./.output/
+COPY scripts/ ./scripts/
+COPY server/ ./server/
+COPY package.json ./package.json
+COPY VERSION ./VERSION
+
+ENV NODE_ENV=production \
+    NITRO_HOST=0.0.0.0 \
+    NITRO_PORT=3000 \
+    DB_DIALECT=sqlite \
+    SQLITE_PATH=/app/data/panel.sqlite
+
+# Непривилегированный пользователь: uid/gid жёстко зафиксированы, чтобы
+# в compose-файле можно было указать user = "10001:10001" и не зависеть от
+# порядка записей в /etc/passwd.
+RUN addgroup -g 10001 -S cardinal \
+ && adduser -u 10001 -S cardinal -G cardinal \
+ && mkdir -p /app/data \
+ && chown -R cardinal:cardinal /app
+
+USER cardinal
+EXPOSE 3000
+VOLUME /app/data
+
+CMD ["node", ".output/server/index.mjs"]

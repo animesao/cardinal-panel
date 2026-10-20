@@ -6,6 +6,43 @@
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-21
+
+### Added
+
+- **Развёртывание панели на runtime cardinal.** Новый режим установщика
+  `--install-mode cardinal`: образ `cardinal-panel:<версия>` собирается из
+  релизного пакета через `cardinal build` (одна стадия — сборка `.output`
+  уже готова, native-модулей нет, образ переносим между машинами), сервис
+  поднимается через `cardinal up` по описанию `/etc/cardinal-panel/cardinal.toml`,
+  миграции выполняются внутри контейнера (`cardinal exec`), включается
+  boot-восстановление (`cardinal bootstrap --install`) — контейнер переживает
+  перезагрузку хоста.
+- **`Dockerfile.cardinal`** — образ для runtime cardinal: база `node:24-alpine`,
+  непривилегированный пользователь `10001:10001`, `VOLUME /app/data`.
+- **`packaging/cardinal/cardinal-panel.toml`** — описание сервиса для cardinal:
+  `network_mode = "host"` (панели нужен доступ к wings на `127.0.0.1:8080`
+  и SFTP на `:2022`, в мосте эти адреса указывают внутрь контейнера),
+  именованный том `panel-data`, `cap_drop = ["ALL"]`, `no_new_privs = true`,
+  healthcheck на `/api/health`.
+- **Ключи установщика:** `--install-mode <cardinal|systemd>`,
+  `--network <host|bridge>`, `--image-tag <тег>`.
+- **Тесты развёртывания на cardinal** (8 шт.): compose-файл разбирается и
+  содержит только поля, поддерживаемые схемой `cardinal/internal/config`;
+  Dockerfile использует только инструкции, поддерживаемые билдером cardinal;
+  все `COPY`-источники образа есть в релизном пакете. Схема и список
+  инструкций продублированы в тесте намеренно — расхождение должно ломать
+  CI панели, а не сборку образа.
+- **Проверка TOML и Dockerfile настоящими парсерами cardinal.** Оба файла
+  разобраны `cardinal/internal/config` и `cardinal/internal/builder` — схема
+  и поддерживаемые инструкции подтверждены на настоящем коде рантайма.
+
+### Fixed
+
+- **`COPY output/` → `COPY .output/`** в `Dockerfile.cardinal`: каталог
+  сборки называется `.output` (с точкой), как его кладёт Nitro. Сборка
+  образа падала бы с «no such file or directory».
+
 ## [0.1.0] — 2026-10-20
 
 ### Added

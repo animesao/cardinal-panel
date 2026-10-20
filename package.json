@@ -2,7 +2,7 @@
   "name": "cardinal-panel",
   "type": "module",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -51,6 +51,7 @@
     "@vitest/coverage-v8": "^3.2.7",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.31",
+    "smol-toml": "^1.9.1",
     "typescript": "^5.8.3",
     "vitest": "^3.2.7",
     "vue-tsc": "^2.2.12"

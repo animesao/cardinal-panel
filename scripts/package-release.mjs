@@ -40,6 +40,7 @@ const PAYLOAD = [
   ['VERSION', path.join(ROOT, 'VERSION')],
   ['.env.example', path.join(ROOT, '.env.example')],
   ['Dockerfile', path.join(ROOT, 'Dockerfile')],
+  ['Dockerfile.cardinal', path.join(ROOT, 'Dockerfile.cardinal')],
   ['docker-compose.yml', path.join(ROOT, 'docker-compose.yml')],
 ];
 

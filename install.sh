@@ -11,6 +11,10 @@
 #   - накатывает миграции БД,
 #   - ставит и включает systemd-юнит.
 #
+# Второй режим — развёртывание контейнером на runtime cardinal:
+# образ собирается из того же релизного пакета, панель запускается
+# как сервис cardinal (cardinal.toml) и переживает перезагрузку хоста.
+#
 # Всё (версия, артефакты, контрольные суммы) скачивается исключительно
 # с официального репозитория GitHub.
 #
@@ -21,6 +25,9 @@
 #   ./install.sh --dir /srv/panel    # другой каталог установки
 #   ./install.sh --no-start          # установить, но не запускать
 #   ./install.sh --uninstall         # снести (данные БД сохраняются)
+#
+#   ./install.sh --install-mode cardinal   # развернуть как контейнер на cardinal
+#   ./install.sh --install-mode cardinal --network bridge
 # ============================================================
 set -euo pipefail
 
@@ -30,16 +37,13 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 err()  { echo -e "${RED}[x]${NC} $1" >&2; exit 1; }
 info() { echo -e "${CYAN}[i]${NC} $1"; }
 
-if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
-  err "Must run as root: sudo bash install.sh"
-fi
-
 # ---- параметры ----
 REPO="animesao/cardinal-panel"
 INSTALL_DIR="/opt/cardinal-panel"
 DATA_DIR="/var/lib/cardinal-panel"
 CONF_DIR="/etc/cardinal-panel"
 CONF_FILE="${CONF_DIR}/panel.env"
+COMPOSE_FILE="${CONF_DIR}/cardinal.toml"
 SERVICE_USER="cardinal"
 SERVICE_NAME="cardinal-panel"
 NODE_VERSION="24"
@@ -47,6 +51,15 @@ PORT="3000"
 VERSION=""
 DO_START=1
 DO_UNINSTALL=0
+
+# Режим установки: systemd (родной процесс) или cardinal (контейнер на
+# runtime cardinal). По умолчанию — systemd.
+INSTALL_MODE="systemd"
+# Сетевой режим контейнера: host — панель видит wings на 127.0.0.1;
+# bridge — панель изолирована, узлы wings указываются по IP хоста.
+NETWORK_MODE="host"
+IMAGE_TAG=""
+BASE_IMAGE="node:24-alpine"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,10 +69,28 @@ while [[ $# -gt 0 ]]; do
     --port)      PORT="${2:-}"; shift 2 ;;
     --no-start)  DO_START=0; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
-    --help|-h)   sed -n '2,30p' "$0"; exit 0 ;;
+    --install-mode) INSTALL_MODE="${2:-}"; shift 2 ;;
+    --network)   NETWORK_MODE="${2:-}"; shift 2 ;;
+    --image-tag) IMAGE_TAG="${2:-}"; shift 2 ;;
+    --help|-h)   sed -n '2,34p' "$0"; exit 0 ;;
     *)           err "Unknown option: $1" ;;
   esac
 done
+
+case "$INSTALL_MODE" in
+  systemd|cardinal) ;;
+  *) err "--install-mode must be 'systemd' or 'cardinal' (got: $INSTALL_MODE)" ;;
+esac
+
+case "$NETWORK_MODE" in
+  host|bridge) ;;
+  *) err "--network must be 'host' or 'bridge' (got: $NETWORK_MODE)" ;;
+esac
+
+# Проверка прав — после разбора аргументов, чтобы --help работал без root.
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  err "Must run as root: sudo bash install.sh"
+fi
 
 # ---- надёжная загрузка: повторы, жёсткие таймауты, запасной IPv4 ----
 download() {
@@ -105,9 +136,20 @@ command -v systemctl >/dev/null 2>&1 || err "systemd is required"
 
 # ---- удаление ----
 if [[ "$DO_UNINSTALL" -eq 1 ]]; then
+  # Контейнер на cardinal: сносим сервис и образ (данные в томе — отдельно).
+  if command -v cardinal >/dev/null 2>&1 && [[ -f "$COMPOSE_FILE" ]]; then
+    log "Stopping cardinal service from $COMPOSE_FILE"
+    cardinal down -f "$COMPOSE_FILE" >/dev/null 2>&1 || warn "cardinal down failed (ignored)"
+    rm -f "$COMPOSE_FILE"
+  fi
+  if command -v cardinal >/dev/null 2>&1; then
+    for tag in $(cardinal images 2>/dev/null | awk '/cardinal-panel/ {print $1" "$2}' | awk '{print $2}' | tr ':' ' ' | awk '{print $1}' | sort -u); do
+      cardinal rmi "$tag" >/dev/null 2>&1 || true
+    done
+  fi
+
   log "Stopping and disabling $SERVICE_NAME"
   systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
-  rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
   rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
   systemctl daemon-reload
   if [[ "${KEEP_DATA:-0}" != "1" ]]; then
@@ -167,8 +209,6 @@ install_node() {
   node -v || err "Node.js installation failed"
 }
 
-install_node
-
 # ---- определение версии ----
 if [[ -z "$VERSION" ]]; then
   info "Resolving latest release"
@@ -220,6 +260,14 @@ chmod 0755 "$INSTALL_DIR"
 chmod 0750 "$DATA_DIR"
 
 # ---- конфигурация и секреты ----
+# Путь к базе различается по режиму: в системном режиме файл лежит на
+# хосте, в режиме cardinal — внутри контейнера (том panel-data).
+if [[ "$INSTALL_MODE" == "cardinal" ]]; then
+  SQLITE_PATH_IN="/app/data/panel.sqlite"
+else
+  SQLITE_PATH_IN="${DATA_DIR}/panel.sqlite"
+fi
+
 if [[ -f "$CONF_FILE" ]]; then
   info "Keeping existing $CONF_FILE"
 else
@@ -245,7 +293,7 @@ AUTH_ORIGIN="http://localhost:${PORT}/api/auth"
 
 # База данных.
 DB_DIALECT="sqlite"
-SQLITE_PATH="${DATA_DIR}/panel.sqlite"
+SQLITE_PATH="${SQLITE_PATH_IN}"
 
 # Порт, на котором слушает панель (127.0.0.1 - за обратным прокси).
 NITRO_HOST="127.0.0.1"
@@ -262,49 +310,170 @@ EOF
   log "Generated NEXTAUTH_SECRET in $CONF_FILE"
 fi
 
-# ---- зависимости для миграций ----
-# Миграции запускаются из scripts/ и тянут drizzle-kit + drizzle-orm.
-if [[ ! -d "${INSTALL_DIR}/node_modules" ]]; then
-  log "Installing runtime dependencies (needed for migrations)"
-  ( cd "$INSTALL_DIR" && npm install --omit=dev --no-audit --no-fund --ignore-scripts ) \
-    || warn "npm install failed - migrations may not run"
-fi
+# ---- развёртывание: systemd (родной процесс) ----
+deploy_systemd() {
+  install_node
 
-# ---- миграции БД ----
-log "Applying database migrations"
-if ( cd "$INSTALL_DIR" && DB_DIALECT=sqlite SQLITE_PATH="${DATA_DIR}/panel.sqlite" \
-      node scripts/migrate-sqlite.mjs ); then
-  log "Migrations applied"
-else
-  warn "Migrations failed - run manually: cd $INSTALL_DIR && npm run db:migrate"
-fi
+  log "Installing systemd unit"
+  local unit_src="${INSTALL_DIR}/packaging/systemd/${SERVICE_NAME}.service"
+  [[ -f "$unit_src" ]] || err "Systemd unit not found in the release package: $unit_src"
+  sed -e "s#/opt/cardinal-panel#${INSTALL_DIR}#g" \
+      -e "s#/var/lib/cardinal-panel#${DATA_DIR}#g" \
+      -e "s#/etc/cardinal-panel#${CONF_DIR}#g" \
+      -e "s#^User=.*#User=${SERVICE_USER}#" \
+      -e "s#^Group=.*#Group=${SERVICE_USER}#" \
+      -e "s#^NITRO_PORT=.*#NITRO_PORT=${PORT}#" \
+      "$unit_src" > "/etc/systemd/system/${SERVICE_NAME}.service"
+  chmod 0644 "/etc/systemd/system/${SERVICE_NAME}.service"
+  systemctl daemon-reload
+  systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
 
-# ---- systemd ----
-log "Installing systemd unit"
-UNIT_SRC="${INSTALL_DIR}/packaging/systemd/${SERVICE_NAME}.service"
-[[ -f "$UNIT_SRC" ]] || err "Systemd unit not found in the release package: $UNIT_SRC"
-sed -e "s#/opt/cardinal-panel#${INSTALL_DIR}#g" \
-    -e "s#/var/lib/cardinal-panel#${DATA_DIR}#g" \
-    -e "s#/etc/cardinal-panel#${CONF_DIR}#g" \
-    -e "s#^User=.*#User=${SERVICE_USER}#" \
-    -e "s#^Group=.*#Group=${SERVICE_USER}#" \
-    -e "s#^NITRO_PORT=.*#NITRO_PORT=${PORT}#" \
-    "$UNIT_SRC" > "/etc/systemd/system/${SERVICE_NAME}.service"
-chmod 0644 "/etc/systemd/system/${SERVICE_NAME}.service"
-systemctl daemon-reload
-systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+  # Миграции БД: запускаются на хосте (нужен Node и scripts/).
+  install_runtime_deps
+  apply_migrations_host
 
-if [[ "$DO_START" -eq 1 ]]; then
-  log "Starting $SERVICE_NAME"
-  systemctl restart "$SERVICE_NAME"
-  sleep 2
-  if systemctl is-active --quiet "$SERVICE_NAME"; then
-    log "Service is running"
-  else
-    warn "Service failed to start. Check: journalctl -u ${SERVICE_NAME} -n 50"
+  if [[ "$DO_START" -eq 1 ]]; then
+    log "Starting $SERVICE_NAME"
+    systemctl restart "$SERVICE_NAME"
+    sleep 2
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+      log "Service is running"
+    else
+      warn "Service failed to start. Check: journalctl -u ${SERVICE_NAME} -n 50"
+    fi
   fi
+}
+
+# ---- развёртывание: контейнер на runtime cardinal ----
+deploy_cardinal() {
+  command -v cardinal >/dev/null 2>&1 || err "cardinal is not installed.
+Install the runtime first:
+  curl -fsSL https://raw.githubusercontent.com/animesao/cardinal/main/install.sh | sudo bash
+Then re-run this installer with --install-mode cardinal."
+
+  local tag="${IMAGE_TAG:-cardinal-panel:${VERSION}}"
+  local dockerfile="${INSTALL_DIR}/Dockerfile.cardinal"
+  [[ -f "$dockerfile" ]] || err "Dockerfile.cardinal not found in the release package: $dockerfile"
+
+  # Базовый образ тянется заранее: так ошибка доступа к реестру видна сразу,
+  # а не внутри сборки.
+  log "Pulling base image $BASE_IMAGE"
+  if ! cardinal pull "$BASE_IMAGE"; then
+    warn "cardinal pull failed. If the runtime works with a strict registry allowlist"
+    warn "(CARDINAL_REGISTRY_STRICT=1), allow the registry: cardinal registry allowlist add docker.io"
+  fi
+
+  log "Building image $tag"
+  ( cd "$INSTALL_DIR" && cardinal build -t "$tag" -f Dockerfile.cardinal . ) \
+    || err "cardinal build failed"
+
+  # Compose-файл для cardinal: подставляем фактические значения.
+  log "Writing $COMPOSE_FILE"
+  mkdir -p "$CONF_DIR"
+  local template="${INSTALL_DIR}/packaging/cardinal/cardinal-panel.toml"
+  [[ -f "$template" ]] || err "cardinal-panel.toml not found in the release package: $template"
+  sed -e "s#^image = .*#image = \"${tag}\"#" \
+      -e "s#^network_mode = .*#network_mode = \"${NETWORK_MODE}\"#" \
+      -e "s#/etc/cardinal-panel/panel.env#${CONF_FILE}#g" \
+      "$template" > "$COMPOSE_FILE"
+  chmod 0640 "$COMPOSE_FILE"
+
+  # Порт должен быть свободен: иначе контейнер не поднимется, а сообщение
+  # об ошибке будет невнятным.
+  if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":${PORT} "; then
+    warn "Port ${PORT} is already in use on the host"
+    warn "Stop the service that occupies it or pass --port with a free one"
+  fi
+
+  if [[ "$DO_START" -eq 1 ]]; then
+    # Панель могла быть поставлена ранее: снимаем старый контейнер, чтобы
+    # апгрейд не падал на занятом имени.
+    log "Stopping the previous panel container (if any)"
+    cardinal down -f "$COMPOSE_FILE" >/dev/null 2>&1 || true
+
+    log "Starting the panel with cardinal"
+    cardinal up -f "$COMPOSE_FILE" || err "cardinal up failed"
+
+    # Миграции выполняются внутри контейнера: на хосте Node может отсутствовать.
+    log "Applying database migrations inside the container"
+    sleep 3
+    cardinal exec panel node scripts/migrate-sqlite.mjs \
+      || warn "migrations failed - run: cardinal exec panel node scripts/migrate-sqlite.mjs"
+
+    # Ждём, пока панель поднимется и ответит на /api/health.
+    local attempt=0
+    local ready=0
+    while [[ "$attempt" -lt 30 ]]; do
+      if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
+        ready=1
+        break
+      fi
+      attempt=$((attempt + 1))
+      sleep 2
+    done
+    if [[ "$ready" -eq 1 ]]; then
+      log "Panel is healthy at http://127.0.0.1:${PORT}"
+    else
+      warn "Panel did not become healthy in 60s. Check: cardinal logs panel"
+    fi
+
+    # Чтобы контейнер пережил перезагрузку хоста, ставим boot-восстановление.
+    log "Enabling cardinal boot recovery"
+    cardinal bootstrap --install || warn "cardinal bootstrap --install failed (containers may not survive reboot)"
+  fi
+}
+
+# ---- зависимости и миграции (системный режим) ----
+install_runtime_deps() {
+  # Миграции запускаются из scripts/ и тянут drizzle-kit + drizzle-orm.
+  if [[ ! -d "${INSTALL_DIR}/node_modules" ]]; then
+    log "Installing runtime dependencies (needed for migrations)"
+    ( cd "$INSTALL_DIR" && npm install --omit=dev --no-audit --no-fund --ignore-scripts ) \
+      || warn "npm install failed - migrations may not run"
+  fi
+}
+
+apply_migrations_host() {
+  log "Applying database migrations"
+  if ( cd "$INSTALL_DIR" && DB_DIALECT=sqlite SQLITE_PATH="${DATA_DIR}/panel.sqlite" \
+        node scripts/migrate-sqlite.mjs ); then
+    log "Migrations applied"
+  else
+    warn "Migrations failed - run manually: cd $INSTALL_DIR && npm run db:migrate"
+  fi
+}
+
+# ---- запуск выбранного режима ----
+if [[ "$INSTALL_MODE" == "cardinal" ]]; then
+  deploy_cardinal
+else
+  deploy_systemd
 fi
 
+if [[ "$INSTALL_MODE" == "cardinal" ]]; then
+cat <<EOF
+
+${GREEN}cardinal-panel ${VERSION} installed (mode: cardinal)${NC}
+
+  Image       : $(command -v cardinal >/dev/null 2>&1 && echo "${IMAGE_TAG:-cardinal-panel:${VERSION}}" || echo "n/a")
+  Config      : ${CONF_FILE}
+  Compose     : ${COMPOSE_FILE}
+  Panel URL   : http://127.0.0.1:${PORT}
+  Data        : именованный том cardinal "panel-data"
+
+Next steps:
+  1. Create the first admin account:
+       cardinal exec panel node scripts/create-admin.mjs
+  2. Put a reverse proxy (nginx/Caddy) in front of 127.0.0.1:${PORT}
+     and set NUXT_PANEL_URL in ${CONF_FILE} to the public address.
+  3. Add the panel node in cardinal-wings (Admin -> Nodes -> Add node).
+
+  Status:  cardinal ps
+  Logs:    cardinal logs panel
+  Stop:    cardinal down -f ${COMPOSE_FILE}
+
+EOF
+else
 cat <<EOF
 
 ${GREEN}cardinal-panel ${VERSION} installed${NC}
@@ -325,3 +494,4 @@ Next steps:
   Status:  systemctl status ${SERVICE_NAME}
 
 EOF
+fi

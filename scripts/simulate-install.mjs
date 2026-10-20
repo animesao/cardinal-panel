@@ -32,9 +32,12 @@ const step = (name, ok, detail = '') => {
 };
 
 async function main() {
-  const archive = path.join(ROOT, 'release', 'cardinal-panel-0.1.0.tar.gz');
+  const version = (await readFile(path.join(ROOT, 'VERSION'), 'utf8')).trim();
+  const archive = path.join(ROOT, 'release', `cardinal-panel-${version}.tar.gz`);
   if (!existsSync(archive)) {
-    console.error('[simulate-install] нет release/*.tar.gz — выполните npm run release:package');
+    console.error(
+      `[simulate-install] нет release/cardinal-panel-${version}.tar.gz — выполните npm run release:package`,
+    );
     process.exit(1);
   }
 
@@ -54,10 +57,25 @@ async function main() {
   for (const file of ['package.json', 'VERSION', '.env.example']) {
     await cp(path.join(stage, file), path.join(INSTALL_DIR, file));
   }
+  // Файлы, нужные режиму cardinal: образ и compose-шаблон.
+  await cp(path.join(stage, 'Dockerfile.cardinal'), path.join(INSTALL_DIR, 'Dockerfile.cardinal'));
   step('.output перенесён', existsSync(path.join(INSTALL_DIR, '.output', 'server', 'index.mjs')));
   step('packaging перенесён', existsSync(path.join(INSTALL_DIR, 'packaging', 'systemd', 'cardinal-panel.service')));
+  step('cardinal-образ в пакете', existsSync(path.join(INSTALL_DIR, 'Dockerfile.cardinal')));
+  step(
+    'cardinal compose-шаблон в пакете',
+    existsSync(path.join(INSTALL_DIR, 'packaging', 'cardinal', 'cardinal-panel.toml')),
+  );
   step('миграции перенесены', existsSync(path.join(INSTALL_DIR, 'server', 'db', 'migrations', 'sqlite')));
   step('скрипт миграций на месте', existsSync(path.join(INSTALL_DIR, 'scripts', 'migrate-sqlite.mjs')));
+
+  // 2b. Всё, что копирует Dockerfile.cardinal, должно быть в пакете.
+  const dockerfile = await readFile(path.join(INSTALL_DIR, 'Dockerfile.cardinal'), 'utf8');
+  const copySources = [...dockerfile.matchAll(/^COPY\s+(\S+)/gm)].map((m) => m[1]);
+  const missing = copySources.filter(
+    (source) => !existsSync(path.join(INSTALL_DIR, source.replace(/\/$/, ''))),
+  );
+  step('все COPY-источники Dockerfile.cardinal есть в пакете', missing.length === 0, missing.join(', '));
 
   // 3. Конфиг как в install.sh
   const conf = path.join(SANDBOX, 'etc', 'cardinal-panel', 'panel.env');
@@ -127,7 +145,7 @@ async function main() {
     health.status === 200,
     `HTTP ${health.status} ${JSON.stringify(health.body).slice(0, 160)}`,
   );
-  step('health отдаёт версию', health.body?.version === '0.1.0', `version=${health.body?.version}`);
+  step('health отдаёт версию', health.body?.version === version, `version=${health.body?.version}`);
   step('health видит базу', health.body?.database === 'ok');
 
   if (health.status !== 200) {
