@@ -9,6 +9,7 @@
 import { mkdir, rm, cp, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
@@ -19,6 +20,10 @@ const SANDBOX = path.join(os.tmpdir(), 'cardinal-panel-install-sim');
 const INSTALL_DIR = path.join(SANDBOX, 'opt', 'cardinal-panel');
 const DATA_DIR = path.join(SANDBOX, 'var', 'lib', 'cardinal-panel');
 const PORT = 3131;
+
+// Секрет генерируется на каждый прогон: в репозитории не остаётся
+// ни одного литерала, похожего на настоящий ключ.
+const SIM_SECRET = randomBytes(32).toString('base64url');
 
 const steps = [];
 const step = (name, ok, detail = '') => {
@@ -60,7 +65,7 @@ async function main() {
   await writeFile(
     conf,
     [
-      'NEXTAUTH_SECRET="simulation-secret-0123456789abcdef"',
+      `NEXTAUTH_SECRET="${SIM_SECRET}"`,
       `SQLITE_PATH="${path.join(DATA_DIR, 'panel.sqlite').replace(/\\/g, '/')}"`,
       'DB_DIALECT="sqlite"',
       'NITRO_HOST="127.0.0.1"',
@@ -98,7 +103,7 @@ async function main() {
       NITRO_PORT: String(PORT),
       DB_DIALECT: 'sqlite',
       SQLITE_PATH: path.join(DATA_DIR, 'panel.sqlite'),
-      NEXTAUTH_SECRET: 'simulation-secret-0123456789abcdef',
+      NEXTAUTH_SECRET: SIM_SECRET,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

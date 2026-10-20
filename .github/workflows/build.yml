@@ -26,6 +26,9 @@ jobs:
       - name: lint (server imports)
         run: npm run lint
 
+      - name: проверка на секреты в отслеживаемых файлах
+        run: npm run check:secrets
+
       - name: typecheck
         run: npm run typecheck
 
