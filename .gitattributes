@@ -1,0 +1,19 @@
+# Автоматически нормализуем окончания строк: репозиторий хранит LF,
+# checkout на Windows приводит файлы к CRLF.
+* text=auto eol=lf
+
+# Бинарные файлы не должны трогаться конвертацией строк.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.sqlite binary
+*.db binary
+
+# Скрипты установки и CI обязаны быть с LF — иначе ломается shebang.
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

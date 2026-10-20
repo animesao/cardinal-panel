@@ -1,0 +1,79 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - name: lint (server imports)
+        run: npm run lint
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: unit tests
+        run: npm test
+
+      - name: version sync
+        run: npm run release:version -- --check
+
+      - name: build
+        run: npm run build
+
+      - name: package release artifacts
+        run: npm run release:package
+
+      - name: dependency audit (production)
+        # Гейт по critical для production-зависимостей: именно они попадают
+        # в релиз. Оставшиеся high — build-инструментарий (tailwind, vite,
+        # esbuild, micromatch), в рантайм не попадает; полный отчёт ниже.
+        run: npm audit --audit-level=critical --omit=dev
+
+      - name: full audit report
+        if: always()
+        run: npm audit --omit=dev --json > audit-report.json || true
+
+      - name: upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report
+          path: audit-report.json
+          retention-days: 14
+
+      - name: shellcheck install.sh
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck -S warning install.sh
+
+      - name: secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardinal-panel-release
+          path: release/
+          retention-days: 7
+          if-no-files-found: error

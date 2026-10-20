@@ -1,0 +1,1 @@
+ALTER TABLE users ADD locale varchar(10) DEFAULT 'ru' NOT NULL;

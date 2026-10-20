@@ -1,0 +1,1 @@
+ALTER TABLE `nodes` ADD `database_host_id` integer REFERENCES database_hosts(id);

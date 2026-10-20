@@ -1,0 +1,1 @@
+ALTER TABLE `servers` ADD `suspended` integer DEFAULT 0 NOT NULL;

@@ -1,0 +1,61 @@
+{
+  "name": "cardinal-panel",
+  "type": "module",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "node scripts/patch-next-auth-core.mjs && nuxt prepare",
+    "db:push": "node scripts/with-env.mjs DB_DIALECT=mysql -- node node_modules/drizzle-kit/bin.cjs push",
+    "db:migrate": "node scripts/migrate-sqlite.mjs",
+    "create-admin": "node scripts/create-admin.mjs",
+    "db:migrate:mysql": "node scripts/with-env.mjs DB_DIALECT=mysql -- node node_modules/drizzle-kit/bin.cjs migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:generate": "drizzle-kit generate",
+    "db:generate:mysql": "node scripts/with-env.mjs DB_DIALECT=mysql -- node node_modules/drizzle-kit/bin.cjs generate",
+    "db:check": "node scripts/check-db-connection.mjs",
+    "check:imports": "node scripts/check-imports.mjs",
+    "lint": "node scripts/check-imports.mjs",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "release:package": "node scripts/package-release.mjs",
+    "release:version": "node scripts/sync-version.mjs",
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "@sidebase/nuxt-auth": "^1.2.0",
+    "ansi-to-html": "^0.7.2",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "jsonwebtoken": "^9.0.3",
+    "monaco-editor": "^0.57.0",
+    "mysql2": "^3.22.1",
+    "next-auth": "^4.24.15",
+    "nuxt": "^4.4.2",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.32",
+    "vue-i18n": "^11.4.14",
+    "vue-router": "^5.0.4"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.7",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.31",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.7",
+    "vue-tsc": "^2.2.12"
+  },
+  "overrides": {
+    "next-auth": "^4.24.15",
+    "next": "^15.5.4",
+    "postcss": "^8.5.31"
+  }
+}

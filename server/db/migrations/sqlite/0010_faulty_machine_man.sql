@@ -1,0 +1,1 @@
+ALTER TABLE `nodes` ADD `swap` integer DEFAULT 0;

@@ -1,0 +1,1 @@
+UPDATE `users` SET `locale` = 'en' WHERE `locale` = 'ru';

@@ -1,0 +1,2 @@
+ALTER TABLE `nodes` ADD `database_host_id` int;--> statement-breakpoint
+ALTER TABLE `nodes` ADD CONSTRAINT `nodes_database_host_id_database_hosts_id_fk` FOREIGN KEY (`database_host_id`) REFERENCES `database_hosts`(`id`) ON DELETE set null ON UPDATE no action;

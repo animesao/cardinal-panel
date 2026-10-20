@@ -1,0 +1,22 @@
+# gitleaks config для cardinal-panel.
+# Разрешены только документированные плейсхолдеры в примерах.
+title = "cardinal-panel gitleaks"
+
+[allowlist]
+  description = "Allow documented placeholders in examples"
+  paths = [
+    '''(?i)\.env\.example$''',
+    '''(?i)README\.md$''',
+    '''(?i)CHANGELOG\.md$''',
+    '''(?i)install\.sh$''',
+    '''(?i)packaging/.*$''',
+  ]
+  regexes = [
+    '''(?i)rootpass[^A-Za-z0-9_-]''',
+    '''(?i)change[_ ]?me[^A-Za-z0-9_-]''',
+    '''(?i)botpass[^A-Za-z0-9_-]''',
+    '''(?i)(password|secret|token)\s*[:=]\s*["{''<]?(REPLACE|CHANGE|EXAMPLE)\b''',
+  ]
+
+[extend]
+  useDefault = true

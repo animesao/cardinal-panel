@@ -1,0 +1,49 @@
+[Unit]
+Description=Cardinal Panel (Nuxt 4)
+Documentation=https://github.com/animesao/cardinal-panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cardinal
+Group=cardinal
+WorkingDirectory=/opt/cardinal-panel
+
+# Секреты НЕ кладутся в Environment= файла юнита: они попадают в
+# `systemctl show` и в /proc/<pid>/environ. О operator'а есть отдельный
+# файл /etc/cardinal-panel/panel.env с правами 0600.
+EnvironmentFile=-/etc/cardinal-panel/panel.env
+Environment=NODE_ENV=production
+Environment=NITRO_HOST=127.0.0.1
+Environment=NITRO_PORT=3000
+Environment=DB_DIALECT=sqlite
+Environment=SQLITE_PATH=/var/lib/cardinal-panel/panel.sqlite
+
+ExecStart=/usr/bin/node .output/server/index.mjs
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Углубить защиту процесса.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+ReadWritePaths=/var/lib/cardinal-panel
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cardinal-panel
+
+[Install]
+WantedBy=multi-user.target

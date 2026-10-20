@@ -1,0 +1,43 @@
+# Build outputs
+.output
+.nuxt
+.nitro
+.cache
+dist
+.data
+
+# Local panel database (SQLite default: SQLITE_PATH, e.g. ./data/panel.sqlite)
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+
+# Node dependencies
+node_modules
+
+# Test artifacts
+coverage
+test-results
+playwright-report
+.nyc_output
+
+# Logs
+logs
+*.log
+
+# Release artifacts (built by scripts/package-release.mjs)
+release
+
+# Local env files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editors / OS
+.DS_Store
+.fleet
+.idea
+.vscode
+*.swp

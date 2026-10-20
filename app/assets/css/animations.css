@@ -1,0 +1,98 @@
+/* Анимации панели: спокойные, быстрые, везде одинаковые.
+   fade-up — появление блоков, pop — модалки, slide-down — выпадашки,
+   lift — подъём карточек при наведении, shimmer — скелетоны. */
+
+@keyframes kt-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes kt-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes kt-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes kt-slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes kt-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.kt-enter {
+  animation: kt-fade-up 0.24s ease both;
+}
+
+.kt-fade-in {
+  animation: kt-fade-in 0.18s ease both;
+}
+
+.kt-pop {
+  animation: kt-pop 0.17s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.kt-menu {
+  animation: kt-slide-down 0.15s ease both;
+  transform-origin: top center;
+}
+
+/* Подъём карточек при наведении — только transform+shadow, без дёргания layout. */
+.kt-lift {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.kt-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* Лёгкое нажатие кнопок. */
+.kt-press {
+  transition: transform 0.12s ease;
+}
+.kt-press:active {
+  transform: scale(0.98);
+}
+
+/* Скелетоны загрузки. */
+.kt-shimmer {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.09) 50%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 200% 100%;
+  animation: kt-shimmer 1.4s linear infinite;
+}
+
+/* Переход между страницами Nuxt. */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.page-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kt-enter,
+  .kt-fade-in,
+  .kt-pop,
+  .kt-menu,
+  .kt-shimmer,
+  .page-enter-active,
+  .page-leave-active {
+    animation: none;
+    transition: none;
+  }
+  .kt-lift:hover {
+    transform: none;
+  }
+}

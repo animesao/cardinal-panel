@@ -1,0 +1,1 @@
+ALTER TABLE `servers` ADD `port_slots` int DEFAULT 0;

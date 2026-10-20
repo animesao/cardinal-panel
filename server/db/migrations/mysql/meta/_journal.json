@@ -1,0 +1,153 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1791903076074,
+      "tag": "0000_robust_cyclops",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1791905310811,
+      "tag": "0001_gray_kree",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1791906103684,
+      "tag": "0002_colorful_nova",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1791907291493,
+      "tag": "0003_nervous_glorian",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1791909079435,
+      "tag": "0004_large_hitman",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1791990561202,
+      "tag": "0005_overconfident_fixer",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1791994700140,
+      "tag": "0006_parallel_echo",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1792031999709,
+      "tag": "0007_tense_patriot",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1792040732268,
+      "tag": "0008_hot_blue_shield",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1792061354132,
+      "tag": "0009_nosy_donald_blake",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1792077193643,
+      "tag": "0010_elite_black_bird",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1792082666353,
+      "tag": "0011_amazing_vector",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1792083472148,
+      "tag": "0012_panel_settings_mysql",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1792144434443,
+      "tag": "0013_api_keys_mysql",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1792147193668,
+      "tag": "0014_password_hash_mysql",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1792148368048,
+      "tag": "0015_login_history_mysql",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1792152148980,
+      "tag": "0016_user_locale_mysql",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1792158207998,
+      "tag": "0017_default_locale_en_mysql",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1792158943856,
+      "tag": "0018_server_suspended_mysql",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1792160155108,
+      "tag": "0019_schedules_mysql",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792162070028,
+      "tag": "0020_user_totp_mysql",
+      "breakpoints": true
+    }
+  ]
+}

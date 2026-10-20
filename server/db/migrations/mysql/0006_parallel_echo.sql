@@ -1,0 +1,1 @@
+ALTER TABLE `servers` ADD `auto_start` int DEFAULT 0;
