@@ -71,10 +71,20 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck -S warning install.sh
 
-      - name: secret scan
-        uses: gitleaks/gitleaks-action@v2
+      - name: gitleaks (secret scan)
+        # Прямой вызов CLI, а не gitleaks-action: action считает диапазон
+        # коммитов как <первый-новый>^..HEAD, а у первого коммита пустого
+        # репозитория нет родителя — git падал с "unknown revision", и
+        # action отдавал exit 1 без единой находки. CLI со --log-opts=--all
+        # сканирует всю историю и не зависит от формы репозитория.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: '8.24.3'
+        run: |
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          chmod +x /usr/local/bin/gitleaks
+          gitleaks git --redact --exit-code 1 --config .gitleaks.toml --log-opts="--all" .
 
       - name: upload release artifacts
         uses: actions/upload-artifact@v4

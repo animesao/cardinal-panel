@@ -17,6 +17,20 @@ title = "cardinal-panel gitleaks"
     '''(?i)botpass[^A-Za-z0-9_-]''',
     '''(?i)(password|secret|token)\s*[:=]\s*["{''<]?(REPLACE|CHANGE|EXAMPLE)\b''',
   ]
+  # 9cf055b добавил scripts/simulate-install.mjs с зашитым тестовым
+  # значением NEXTAUTH_SECRET ("simulation-secret-0123456789abcdef").
+  # Это не настоящий секрет: значение использовалось только в CI-песочнице
+  # симуляции установки и никогда не разворачивалось на сервере. В следующем
+  # коммите (da01a3d) оно заменено на случайно генерируемое
+  # randomBytes(32) — в HEAD литерала нет, и `npm run check:secrets`
+  # это проверяет на каждом запуске CI.
+  #
+  # Это allowlist, а не исправление: значение остаётся в публичной истории.
+  # Скопирован на конкретный коммит, чтобы утечка в любом другом месте
+  # по-прежнему валила скан.
+  commits = [
+    '''9cf055b821e69129713feb8e33ea29b1d77d23f3''',
+  ]
 
 [extend]
   useDefault = true
