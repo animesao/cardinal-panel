@@ -19,7 +19,9 @@ WORKDIR /app
 # (каталог называется .output/ — с точкой, как его кладёт Nitro).
 COPY .output/ ./.output/
 COPY scripts/ ./scripts/
-COPY server/ ./server/
+# Только миграции: исходники сервера уже собраны в .output, а скрипту
+# миграций нужен лишь каталог server/db/migrations.
+COPY server/db/migrations/ ./server/db/migrations/
 COPY package.json ./package.json
 COPY VERSION ./VERSION
 

@@ -112,19 +112,49 @@ describe('Dockerfile.cardinal', () => {
     expect(raw).toMatch(/^FROM node:24-alpine$/m);
   });
 
-  it('копирует только файлы, которые есть в релизном пакете', async () => {
+  it('копирует только то, что есть в релизном пакете', async () => {
     const raw = await readFile(DOCKERFILE, 'utf8');
     const copies = [...raw.matchAll(/^COPY\s+(\S+)/gm)].map((match) => match[1]);
     expect(copies.length).toBeGreaterThan(0);
 
+    // Состав релизного пакета задан в scripts/package-release.mjs: проверяем
+    // именно его. Каталог .output/ в репозитории отсутствует — он появляется
+    // только после сборки, а тесты в CI идут ДО шага build.
+    const packager = await readFile(
+      path.join(ROOT, 'scripts', 'package-release.mjs'),
+      'utf8',
+    );
+    const payloadBlock = packager.match(/const PAYLOAD = \[([\s\S]*?)\n\];/);
+    expect(payloadBlock, 'не найден список PAYLOAD в package-release.mjs').not.toBeNull();
+    const payload = [...payloadBlock![1].matchAll(/\[\s*'([^']+)'/g)].map(
+      (match) => match[1],
+    );
+    expect(payload.length).toBeGreaterThan(0);
+
     for (const source of copies) {
+      // Пакет может содержать подкаталог источника (server/db/migrations/
+      // покрывает COPY server/) — такое тоже считается попаданием.
+      const inPackage = payload.some(
+        (entry) =>
+          entry === source ||
+          entry.startsWith(source) ||
+          source.startsWith(entry),
+      );
+      expect(
+        inPackage,
+        `COPY ссылается на "${source}", которого нет в релизном пакете`,
+      ).toBe(true);
+    }
+
+    // Всё, что копируется из репозитория (а не из сборки), должно
+    // существовать в нём же.
+    for (const source of copies) {
+      if (source === '.output/') continue;
       const target = path.join(ROOT, source.replace(/\/$/, ''));
-      const exists = existsSync(target)
-        ? true
-        : await stat(target).then(
-            () => true,
-            () => false,
-          );
+      const exists = await stat(target).then(
+        () => true,
+        () => false,
+      );
       expect(exists, `COPY ссылается на отсутствующий путь: ${source}`).toBe(true);
     }
   });
