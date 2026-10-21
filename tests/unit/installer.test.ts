@@ -102,6 +102,38 @@ describe('установщик', () => {
     expect(revokeIndex).toBeGreaterThan(registerIndex);
   });
 
+  it('не путает версию панели с VERSION из /etc/os-release', () => {
+    // /etc/os-release определяет переменную VERSION (например
+    // "24.04.4 LTS (Noble Numbat)"). После подключения файла её нужно
+    // сбросить, иначе установщик пытается скачать релиз с именем
+    // "24.04.4 LTS (Noble Numbat)".
+    expect(installer).toMatch(/^\s*unset VERSION$/m);
+    expect(installer).toContain('PANEL_VERSION=""');
+
+    // Никаких обращений к голой переменной VERSION как к версии панели.
+    const lines = installer.split('\n');
+    const offenders = lines.filter((line) => {
+      if (/unset VERSION/.test(line)) return false;
+      if (/cardinal-panel\/VERSION/.test(line)) return false; // имя файла
+      if (/NODE_VERSION|VERSION_ID|PANEL_VERSION/.test(line)) return false;
+      return /\$\{?VERSION\b/.test(line);
+    });
+    expect(
+      offenders,
+      `обращение к $VERSION как к версии панели:\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('проверяет, что версия из API похожа на SemVer', () => {
+    // Вместо битого URL с пробелами — внятная ошибка.
+    expect(installer).toContain("grep -Eq '^[0-9]+\\.[0-9]+\\.[0-9]+$'");
+  });
+
+  it('скачивает архив с версией в имени', () => {
+    expect(installer).toContain('ARCHIVE="cardinal-panel-${PANEL_VERSION}.tar.gz"');
+    expect(installer).toContain('releases/download/v${PANEL_VERSION}');
+  });
+
   it('сохраняет NEXTAUTH_SECRET при переустановке', () => {
     expect(installer).toContain('Keeping the existing NEXTAUTH_SECRET');
   });

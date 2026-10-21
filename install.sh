@@ -53,7 +53,11 @@ SERVICE_USER="cardinal"
 SERVICE_NAME="cardinal-panel"
 NODE_VERSION="24"
 PORT="3000"
-VERSION=""
+# Версия панели. Имя НЕ `VERSION`: /etc/os-release определяет переменную
+# VERSION (например "24.04.4 LTS (Noble Numbat)"), и её подстановка
+# перетирала бы нашу — установщик пытался скачать релиз с именем
+# "24.04.4 LTS (Noble Numbat)".
+PANEL_VERSION=""
 DO_START=1
 DO_UNINSTALL=0
 
@@ -81,7 +85,7 @@ USE_TLS=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --version)   VERSION="${2:-}"; shift 2 ;;
+    --version)   PANEL_VERSION="${2:-}"; shift 2 ;;
     --dir)       INSTALL_DIR="${2:-}"; shift 2 ;;
     --data-dir)  DATA_DIR="${2:-}"; shift 2 ;;
     --port)      PORT="${2:-}"; shift 2 ;;
@@ -158,6 +162,11 @@ download() {
 # shellcheck disable=SC1091
 . /etc/os-release
 log "OS: ${PRETTY_NAME:-${ID:-unknown} ${VERSION_ID:-}}"
+
+# os-release определяет VERSION (например "24.04.4 LTS (Noble Numbat)").
+# Убираем её, чтобы переменная с таким именем не означала «версию панели»
+# и не подставилась случайно в URL релиза.
+unset VERSION
 
 case "$(uname -m)" in
   x86_64|amd64) ARCH="amd64" ;;
@@ -244,17 +253,21 @@ install_node() {
 }
 
 # ---- определение версии ----
-if [[ -z "$VERSION" ]]; then
+if [[ -z "$PANEL_VERSION" ]]; then
   info "Resolving latest release"
-  VERSION="$(curl -fsSL --connect-timeout 15 --max-time 60 \
+  PANEL_VERSION="$(curl -fsSL --connect-timeout 15 --max-time 60 \
     "https://api.github.com/repos/${REPO}/releases/latest" \
     | grep -m1 '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')" || true
-  [[ -n "$VERSION" ]] || err "Cannot resolve the latest release from GitHub API"
+  # Ответ API должен быть SemVer. Если это не так — внятная ошибка вместо
+  # URL с пробелами, который curl отвергнет.
+  if ! printf '%s' "$PANEL_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    err "Cannot resolve the latest release from the GitHub API (got: '${PANEL_VERSION}')"
+  fi
 fi
-log "Version: $VERSION"
+log "Version: $PANEL_VERSION"
 
-ARCHIVE="cardinal-panel-${VERSION}.tar.gz"
-BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
+ARCHIVE="cardinal-panel-${PANEL_VERSION}.tar.gz"
+BASE_URL="https://github.com/${REPO}/releases/download/v${PANEL_VERSION}"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -404,7 +417,7 @@ Install the runtime first:
   curl -fsSL https://raw.githubusercontent.com/animesao/cardinal/main/install.sh | sudo bash
 Then re-run this installer with --install-mode cardinal."
 
-  local tag="${IMAGE_TAG:-cardinal-panel:${VERSION}}"
+  local tag="${IMAGE_TAG:-cardinal-panel:${PANEL_VERSION}}"
   local dockerfile="${INSTALL_DIR}/Dockerfile.cardinal"
   [[ -f "$dockerfile" ]] || err "Dockerfile.cardinal not found in the release package: $dockerfile"
 
@@ -702,9 +715,9 @@ fi
 if [[ "$INSTALL_MODE" == "cardinal" ]]; then
 cat <<EOF
 
-${GREEN}cardinal-panel ${VERSION} installed (mode: cardinal)${NC}
+${GREEN}cardinal-panel ${PANEL_VERSION} installed (mode: cardinal)${NC}
 
-  Image       : $(command -v cardinal >/dev/null 2>&1 && echo "${IMAGE_TAG:-cardinal-panel:${VERSION}}" || echo "n/a")
+  Image       : $(command -v cardinal >/dev/null 2>&1 && echo "${IMAGE_TAG:-cardinal-panel:${PANEL_VERSION}}" || echo "n/a")
   Config      : ${CONF_FILE}
   Compose     : ${COMPOSE_FILE}
   Panel URL   : ${PUBLIC_URL}
@@ -729,7 +742,7 @@ EOF
 else
 cat <<EOF
 
-${GREEN}cardinal-panel ${VERSION} installed${NC}
+${GREEN}cardinal-panel ${PANEL_VERSION} installed${NC}
 
   Install dir : ${INSTALL_DIR}
   Data dir    : ${DATA_DIR}
