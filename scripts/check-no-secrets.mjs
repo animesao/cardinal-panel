@@ -4,6 +4,8 @@
  *   node scripts/check-no-secrets.mjs
  */
 import { execFileSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const git = (...args) =>
   execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -71,7 +73,9 @@ for (const file of tracked) {
   }
   let content;
   try {
-    content = git('show', `:${file}`);
+    // Читаем РАБОЧЕЕ дерево, а не индекс: проверка должна ловить утечку
+    // до коммита, а не после. В CI рабочее дерево совпадает с коммитом.
+    content = await readFile(path.join(process.cwd(), file), 'utf8');
   } catch {
     continue;
   }

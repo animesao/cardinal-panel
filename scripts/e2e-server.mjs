@@ -10,6 +10,7 @@
  * тестовый, база — во временном каталоге.
  */
 import { spawn, execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -37,7 +38,7 @@ const env = {
   NITRO_PORT: String(PORT),
   DB_DIALECT: 'sqlite',
   SQLITE_PATH: sqlitePath,
-  NEXTAUTH_SECRET: 'e2e-secret-not-used-anywhere-else-0123456789',
+  NEXTAUTH_SECRET: randomBytes(32).toString('base64url'),
   NEXTAUTH_URL: BASE_URL,
   AUTH_ORIGIN: `${BASE_URL}/api/auth`,
   NUXT_PANEL_URL: BASE_URL,
