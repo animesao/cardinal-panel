@@ -168,6 +168,19 @@ describe('установщик', () => {
     expect(packager).toContain("'package-lock.json'");
   });
 
+  it('раскрывает ссылки при упаковке (симлинки npm на Windows)', () => {
+    // npm на Windows дедуплицирует пакеты через junction'ы; без dereference
+    // они попадают в архив как ссылки на виндовые пути и ломают Node на
+    // Linux («Cannot read package config»).
+    const packager = readFileSync(
+      path.join(ROOT, 'scripts', 'package-release.mjs'),
+      'utf8',
+    );
+    expect(packager).toContain('dereference: true');
+    // И страховка: упаковщик сам проверяет, что ссылок в архиве нет.
+    expect(packager).toMatch(/line\.startsWith\('l'\)/);
+  });
+
   it('сообщает о неудачной установке и завершается с ненулевым кодом', () => {
     expect(installer).toContain('INSTALL_OK=0');
     expect(installer).toContain('BUT NOT WORKING');

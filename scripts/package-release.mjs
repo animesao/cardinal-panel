@@ -149,7 +149,12 @@ async function main() {
     }
     const destination = path.join(pkgRoot, target);
     await mkdir(path.dirname(destination), { recursive: true });
-    await cp(source, destination, { recursive: true });
+    // dereference: true — обязательно. npm на Windows дедуплицирует
+    // одинаковые пакеты через junction'ы (node_modules/.nitro/<pkg>@<ver>),
+    // и без dereference они попадают в архив как ссылки на виндовые
+    // абсолютные пути. На Linux такие ссылки битые, и Node падает с
+    // «Cannot read package config».
+    await cp(source, destination, { recursive: true, dereference: true });
   }
 
   // Служебные файлы, без которых панель не поднимется.
@@ -186,6 +191,23 @@ async function main() {
   ], { stdio: 'inherit' });
 
   await rm(stageDir, { recursive: true, force: true });
+
+  // Страховка: в архиве не должно быть ссылок. Битая ссылка внутри
+  // node_modules выглядит как «Cannot read package config» уже на сервере,
+  // и найти её там почти невозможно — ловим здесь.
+  const listing = execFileSync('tar', ['-tvzf', archivePath], {
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  const links = listing.split('\n').filter((line) => line.startsWith('l'));
+  if (links.length) {
+    console.error(
+      `[package-release] в архиве ${links.length} ссылок — сборка непригодна для Linux:`,
+    );
+    for (const link of links.slice(0, 10)) console.error(`  ${link}`);
+    console.error('[package-release] проверьте, что .output копируется с dereference: true');
+    process.exit(1);
+  }
 
   const digest = await sha256(archivePath);
   await writeFile(`${archivePath}.sha256`, `${digest}  ${archiveName}\n`, 'utf8');
