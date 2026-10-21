@@ -61,6 +61,11 @@ const callbacks = {
       const db = await getDb()  // ← ВАЖНО: await getDb()
       const email = String(user.email).trim().toLowerCase()
       const provider = String(account?.provider || 'unknown')
+      // Парольный вход (credentials) — отдельный путь: правила OAuth
+      // (обход пароля, привязка провайдера, обязательная 2FA) к нему
+      // не применяются, иначе вход по e-mail+паролю был бы невозможен
+      // для аккаунтов, созданных оператором (create-admin).
+      const isCredentials = provider === 'credentials'
       const providerId = String(account?.providerAccountId || user.id || '')
 
       // 1. Устойчивая привязка (provider, providerAccountId). Раньше её не
@@ -102,16 +107,24 @@ const callbacks = {
       } else {
         if (!bound) {
           // Нашли аккаунт по e-mail, а не по привязке провайдера.
-          if (existingUser.passwordHash) {
+          //
+          // ВАЖНО: парольный вход (provider = 'credentials') — законный
+          // путь для аккаунта с паролем. Все проверки ниже относятся только
+          // к OAuth: OAuth-вход не должен обходить пароль, а наоборот —
+          // не должен и запрещаться из-за наличия пароля. Раньше здесь
+          // стояло условие без проверки провайдера, и вход по e-mail+паролю
+          // был невозможен ровно для тех аккаунтов, у которых есть пароль
+          // (то есть созданных оператором через create-admin).
+          if (existingUser.passwordHash && !isCredentials) {
             // У аккаунта есть пароль: OAuth-вход не должен его обходить.
             console.warn('[auth] OAuth-вход в аккаунт с паролем отклонён:', email, provider)
             return '/login?error=PasswordAccountRequired'
           }
-          if (existingUser.provider && existingUser.provider !== provider) {
+          if (!isCredentials && existingUser.provider && existingUser.provider !== provider) {
             console.warn('[auth] Аккаунт уже привязан к другому провайдеру:', email)
             return '/login?error=ProviderAlreadyLinked'
           }
-          if (existingUser.provider === provider && existingUser.providerId && existingUser.providerId !== providerId) {
+          if (!isCredentials && existingUser.provider === provider && existingUser.providerId && existingUser.providerId !== providerId) {
             // Тот же провайдер, но другой аккаунт с тем же e-mail.
             console.warn('[auth] e-mail уже занят другим аккаунтом провайдера:', email)
             return '/login?error=EmailAlreadyUsed'
@@ -122,7 +135,9 @@ const callbacks = {
             lastLogin: new Date(),
             name: user.name || existingUser.name,
             avatar: user.image || existingUser.avatar,
-            ...(bound ? {} : { provider, providerId }),
+            // Привязку провайдера обновляем только для OAuth: парольный вход
+            // не должен затирать существующую привязку (например, к Discord).
+            ...(bound || isCredentials ? {} : { provider, providerId }),
           })
           .where(eq(users.id, existingUser.id))
       }
@@ -130,8 +145,10 @@ const callbacks = {
       // 2. 2FA обязателен для ВСЕХ способов входа. Раньше TOTP проверялся
       //    только внутри CredentialsProvider.authorize, то есть OAuth-вход
       //    (самый популярный) второй фактор полностью обходил.
+      //    Для парольного входа TOTP уже проверен в authorize() — повторная
+      //    проверка здесь отклоняла бы верный вход с кодом.
       const tfaRows = await db.select().from(userTotp).where(eq(userTotp.userId, existingUser?.id ?? 0)).limit(1)
-      if (tfaRows[0]?.enabled) {
+      if (tfaRows[0]?.enabled && !isCredentials) {
         console.warn('[auth] OAuth-вход требует 2FA, вход по паролю:', email)
         return '/login?error=TwoFactorRequired'
       }

@@ -41,6 +41,15 @@ jobs:
       - name: build
         run: npm run build
 
+      - name: install playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: e2e (браузер)
+        # Сквозные тесты по собранной панели: вход, сессия, health.
+        # Именно они поймали баг, из-за которого вход по паролю был
+        # невозможен для аккаунтов с паролем.
+        run: npm run test:e2e
+
       - name: package release artifacts
         run: npm run release:package
 
