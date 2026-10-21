@@ -689,6 +689,42 @@ run_in_panel() {
   fi
 }
 
+# ---- брандмауэр ----
+# Без этого панель настраивается, но недоступна: ufw/firewalld дропают
+# пакеты, и в браузере — «превышено время ожидания ответа» (а не
+# «соединение отклонено», поэтому причина неочевидна).
+setup_firewall() {
+  local opened=0
+
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+    local port
+    for port in 80 443; do
+      if ufw allow "${port}/tcp" comment 'cardinal-panel' >/dev/null 2>&1; then
+        log "ufw: opened ${port}/tcp"
+        opened=1
+      fi
+    done
+    # mDNS: без UDP 5353 имя .local не резолвится в локальной сети.
+    if ufw allow 5353/udp comment 'mDNS (avahi)' >/dev/null 2>&1; then
+      log "ufw: opened 5353/udp (mDNS)"
+    fi
+  fi
+
+  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -q running; then
+    firewall-cmd --permanent --add-service=http >/dev/null 2>&1
+    firewall-cmd --permanent --add-service=https >/dev/null 2>&1
+    firewall-cmd --permanent --add-port=5353/udp >/dev/null 2>&1
+    firewall-cmd --reload >/dev/null 2>&1
+    log "firewalld: opened http, https and mDNS"
+    opened=1
+  fi
+
+  if [[ "$opened" -eq 0 ]]; then
+    info "No active firewall found (ufw/firewalld) - check the ports yourself if the"
+    info "panel is unreachable: 80/tcp for nginx, 5353/udp for mDNS."
+  fi
+}
+
 # ---- дополнительные имена: /etc/hosts и mDNS ----
 # Панель должна открываться и по IP, и по имени. Имя должно резолвиться
 # у клиентов: /etc/hosts на самом сервере + mDNS (avahi) для всей сети.
@@ -928,6 +964,7 @@ if [[ "$DO_START" -eq 1 ]]; then
     if [[ -n "$DOMAIN" ]]; then
       register_hostnames || true
       install_nginx || INSTALL_OK=0
+      setup_firewall || true
       # Неудачный TLS — не «нерабочая установка»: панель живёт по HTTP.
       setup_tls || true
     else

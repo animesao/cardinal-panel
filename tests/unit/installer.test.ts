@@ -193,6 +193,15 @@ describe('установщик', () => {
     expect(installer).toContain("awk 'NR==1{next}");
   });
 
+  it('открывает порты в брандмауэре', () => {
+    // Без этого панель настраивается, но недоступна: ufw дропает пакеты,
+    // и в браузере «превышено время ожидания ответа» — причину не угадать.
+    expect(installer).toContain('setup_firewall');
+    expect(installer).toContain('ufw allow');
+    expect(installer).toContain('5353/udp');
+    expect(installer).toContain('firewall-cmd');
+  });
+
   it('предупреждает, если переданный адрес не адрес этой машины', () => {
     // Клиенты не достучатся: в браузере будет «превышено время ожидания».
     expect(installer).toContain('is not this host');
