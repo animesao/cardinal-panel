@@ -86,7 +86,9 @@ WINGS_TOKEN=""
 USE_PROXY=1
 USE_TLS=1
 # Минимально свободное место на диске с данными, МБ.
-MIN_FREE_MB=256
+# Самой панели хватает ~50 МБ (релиз + .output + база); остальное — запас
+# под базу, логи и бэкапы.
+MIN_FREE_MB=128
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -262,7 +264,7 @@ install_node() {
 # Проверка ДО установки: без неё установщик падает на середине с
 # «database or disk is full» и оставляет после себя сломанный сервис.
 check_disk_space() {
-  local need_mb="${MIN_FREE_MB:-256}"
+  local need_mb="${MIN_FREE_MB:-128}"
   local avail_mb=""
   if command -v df >/dev/null 2>&1; then
     avail_mb="$(df -Pm "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
@@ -273,10 +275,17 @@ check_disk_space() {
   fi
   if [[ "$avail_mb" -lt "$need_mb" ]]; then
     err "Not enough free space in $DATA_DIR: ${avail_mb} MiB available, ${need_mb} MiB required.
-Free some space (e.g. 'apt-get clean && journalctl --vacuum-time=7d') and re-run.
-Override with --min-free <MiB> if you know what you are doing."
+The panel itself needs about 50 MiB (release + .output + database); the rest is
+a reserve for the database, logs and backups.
+Free some space and re-run:
+  apt-get clean && apt-get autoremove -y
+  journalctl --vacuum-time=7d
+  rm -rf /var/lib/apt/lists/*
+To find what occupies the disk:
+  du -xh --max-depth=1 / 2>/dev/null | sort -h | tail -15
+Override the threshold with --min-free <MiB> if you know what you are doing."
   fi
-  if [[ "$avail_mb" -lt 1024 ]]; then
+  if [[ "$avail_mb" -lt 512 ]]; then
     warn "Only ${avail_mb} MiB free - the panel will work, but backups and logs may hit the limit"
   fi
   log "Free space: ${avail_mb} MiB"
