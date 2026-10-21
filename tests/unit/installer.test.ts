@@ -193,6 +193,17 @@ describe('установщик', () => {
     expect(installer).toContain("awk 'NR==1{next}");
   });
 
+  it('предупреждает, если переданный адрес не адрес этой машины', () => {
+    // Клиенты не достучатся: в браузере будет «превышено время ожидания».
+    expect(installer).toContain('is not this host');
+    expect(installer).toMatch(/DOMAIN" != "\$LOCAL_IP"/);
+  });
+
+  it('предупреждает, что mDNS публикует только имена в зоне .local', () => {
+    expect(installer).toMatch(/\*\.local\)/);
+    expect(installer).toContain('does not end with .local');
+  });
+
   it('поддерживает несколько имён доступа (--hostname)', () => {
     // Панель должна открываться и по IP, и по имени: nginx принимает
     // оба, а имя резолвится через /etc/hosts и mDNS.

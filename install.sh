@@ -171,6 +171,15 @@ detect_local_ip() {
 
 LOCAL_IP="$(detect_local_ip)"
 
+# Если передан IP, а машина на другом — клиенты не достучатся. Ловим сразу,
+# а не по «превышено время ожидания ответа» в браузере.
+if [[ -n "$DOMAIN" ]] && is_ip_address "$DOMAIN" && [[ -n "$LOCAL_IP" ]]; then
+  if [[ "$DOMAIN" != "$LOCAL_IP" ]]; then
+    warn "The address $DOMAIN is not this host's address (this machine is $LOCAL_IP)."
+    warn "Clients will not reach the panel. Re-run with --domain $LOCAL_IP"
+  fi
+fi
+
 # Список имён, по которым отвечает nginx: основной адрес + алиасы.
 SERVER_NAMES="$DOMAIN"
 for _h in "${EXTRA_HOSTNAMES[@]}"; do
@@ -708,9 +717,18 @@ register_hostnames() {
         systemctl reload avahi-daemon 2>/dev/null || systemctl restart avahi-daemon 2>/dev/null || true
       fi
     else
-      info "avahi is not installed - '$name' will not resolve on the LAN automatically."
-      info "Install it (apt-get install -y avahi-daemon) or add '$name' to the hosts file of each client."
+      info "avahi-daemon is not installed - '$name' will not resolve on the LAN."
+      info "Install it (apt-get install -y avahi-daemon) and re-run, or add"
+      info "'$name' to the hosts file of each client."
     fi
+
+    # mDNS публикует только имена в зоне .local — остальные доступны лишь
+    # через DNS или hosts-файлы клиентов.
+    case "$name" in
+      *.local) ;;
+      *) warn "'$name' does not end with .local - mDNS will not publish it;"
+         warn "it will only work via DNS or the hosts file of each client" ;;
+    esac
   done
 }
 
