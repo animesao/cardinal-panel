@@ -204,6 +204,15 @@ describe('установщик', () => {
   it('пропускает TLS для IP-адреса (Let\'s Encrypt их не выдаёт)', () => {
     expect(installer).toContain('is_ip_address');
     expect(installer).toMatch(/is_ip_address "\$DOMAIN"[\s\S]{0,200}USE_TLS=0/);
+    // Причина пропуска должна быть видна: иначе выводится «TLS skipped
+    // (--no-tls)», хотя пользователь --no-tls не передавал.
+    expect(installer).toContain('TLS_SKIP_REASON');
+  });
+
+  it('не теряет кириллицу в install.sh', () => {
+    // Скрипт с битой кодировкой ломается на Linux ещё до выполнения.
+    expect(installer).toContain('Публичный');
+    expect(installer).not.toContain('РџСѓР±');
   });
 
   it('переписывает panel.env на http, если сертификат не выдали', () => {

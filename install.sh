@@ -143,11 +143,13 @@ is_ip_address() {
   [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || [[ "$1" == *:* ]]
 }
 PUBLIC_SCHEME="http"
+TLS_SKIP_REASON=""
 if [[ -n "$DOMAIN" ]]; then
   if is_ip_address "$DOMAIN"; then
     USE_TLS=0
     PUBLIC_SCHEME="http"
-    info "$DOMAIN is an IP address - Let's Encrypt does not issue certificates for IPs, TLS is skipped"
+    TLS_SKIP_REASON="${DOMAIN} is an IP address and Let's Encrypt does not issue certificates for IPs - the panel works over HTTP, but OAuth providers require HTTPS and a domain"
+    info "$TLS_SKIP_REASON"
   else
     PUBLIC_SCHEME="https"
   fi
@@ -682,7 +684,11 @@ EOF
 
 setup_tls() {
   if [[ "$USE_TLS" -eq 0 ]]; then
-    warn "TLS skipped (--no-tls)"
+    if [[ -n "$TLS_SKIP_REASON" ]]; then
+      warn "TLS skipped: ${TLS_SKIP_REASON}"
+    else
+      warn "TLS skipped (--no-tls)"
+    fi
     return 0
   fi
   if ! command -v certbot >/dev/null 2>&1; then
