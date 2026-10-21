@@ -37,6 +37,9 @@ const PAYLOAD = [
   ['packaging/', path.join(ROOT, 'packaging')],
   ['server/db/migrations/', path.join(ROOT, 'server', 'db', 'migrations')],
   ['package.json', path.join(ROOT, 'package.json')],
+  // Lock-файл нужен для детерминированной установки зависимостей
+  // (npm ci) — без него версии резолвятся заново при каждой установке.
+  ['package-lock.json', path.join(ROOT, 'package-lock.json')],
   ['VERSION', path.join(ROOT, 'VERSION')],
   ['.env.example', path.join(ROOT, '.env.example')],
   ['Dockerfile', path.join(ROOT, 'Dockerfile')],

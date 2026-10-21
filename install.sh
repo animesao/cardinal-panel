@@ -33,6 +33,9 @@
 #   ./install.sh --domain panel.example.com \
 #                --admin-email admin@example.com \
 #                --wings-url http://10.0.0.5:8080 --wings-token <token>
+#
+# Прочие ключи: --min-free <MiB> (минимальное свободное место, по умолчанию 256),
+#               --no-proxy, --no-tls, --no-start, --uninstall, --version, --dir, --port
 # ============================================================
 set -euo pipefail
 
@@ -82,6 +85,8 @@ WINGS_URL=""
 WINGS_TOKEN=""
 USE_PROXY=1
 USE_TLS=1
+# Минимально свободное место на диске с данными, МБ.
+MIN_FREE_MB=256
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -100,7 +105,8 @@ while [[ $# -gt 0 ]]; do
     --wings-token) WINGS_TOKEN="${2:-}"; shift 2 ;;
     --no-proxy)  USE_PROXY=0; shift ;;
     --no-tls)    USE_TLS=0; shift ;;
-    --help|-h)   sed -n '2,42p' "$0"; exit 0 ;;
+    --min-free)  MIN_FREE_MB="${2:-}"; shift 2 ;;
+    --help|-h)   awk 'NR==1{next} /^#/{print; next} {exit}' "$0"; exit 0 ;;
     *)           err "Unknown option: $1" ;;
   esac
 done
@@ -252,6 +258,30 @@ install_node() {
   node -v || err "Node.js installation failed"
 }
 
+# ---- свободное место ----
+# Проверка ДО установки: без неё установщик падает на середине с
+# «database or disk is full» и оставляет после себя сломанный сервис.
+check_disk_space() {
+  local need_mb="${MIN_FREE_MB:-256}"
+  local avail_mb=""
+  if command -v df >/dev/null 2>&1; then
+    avail_mb="$(df -Pm "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
+  fi
+  if [[ -z "$avail_mb" ]]; then
+    info "Cannot determine free space - skipping the check"
+    return 0
+  fi
+  if [[ "$avail_mb" -lt "$need_mb" ]]; then
+    err "Not enough free space in $DATA_DIR: ${avail_mb} MiB available, ${need_mb} MiB required.
+Free some space (e.g. 'apt-get clean && journalctl --vacuum-time=7d') and re-run.
+Override with --min-free <MiB> if you know what you are doing."
+  fi
+  if [[ "$avail_mb" -lt 1024 ]]; then
+    warn "Only ${avail_mb} MiB free - the panel will work, but backups and logs may hit the limit"
+  fi
+  log "Free space: ${avail_mb} MiB"
+}
+
 # ---- определение версии ----
 if [[ -z "$PANEL_VERSION" ]]; then
   info "Resolving latest release"
@@ -289,6 +319,10 @@ fi
 
 log "Installing to $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$CONF_DIR"
+
+# Место проверяем после создания каталогов: df должен смотреть на ту же
+# файловую систему, где будет лежать база.
+check_disk_space
 
 # Старый .output заменяем целиком, чтобы не осталось мёртвых чанков.
 rm -rf "${INSTALL_DIR}/.output" "${INSTALL_DIR}/scripts" "${INSTALL_DIR}/server" "${INSTALL_DIR}/packaging"
@@ -395,7 +429,6 @@ deploy_systemd() {
   systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
 
   # Миграции БД: запускаются на хосте (нужен Node и scripts/).
-  install_runtime_deps
   apply_migrations_host
 
   if [[ "$DO_START" -eq 1 ]]; then
@@ -405,6 +438,7 @@ deploy_systemd() {
     if systemctl is-active --quiet "$SERVICE_NAME"; then
       log "Service is running"
     else
+      INSTALL_OK=0
       warn "Service failed to start. Check: journalctl -u ${SERVICE_NAME} -n 50"
     fi
   fi
@@ -490,23 +524,37 @@ Then re-run this installer with --install-mode cardinal."
 }
 
 # ---- зависимости и миграции (системный режим) ----
+# Миграции SQLite используют только встроенный node:sqlite, поэтому в
+# обычном случае npm-зависимости НЕ нужны (и не ставятся — это ~300 МБ
+# и лишние минуты). Для MySQL нужен драйвер mysql2 — тогда ставим и повторяем.
 install_runtime_deps() {
-  # Миграции запускаются из scripts/ и тянут drizzle-kit + drizzle-orm.
-  if [[ ! -d "${INSTALL_DIR}/node_modules" ]]; then
-    log "Installing runtime dependencies (needed for migrations)"
-    ( cd "$INSTALL_DIR" && npm install --omit=dev --no-audit --no-fund --ignore-scripts ) \
-      || warn "npm install failed - migrations may not run"
+  if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
+    return 0
   fi
+  log "Installing runtime dependencies"
+  ( cd "$INSTALL_DIR" && npm ci --omit=dev --no-audit --no-fund --ignore-scripts ) \
+    || ( cd "$INSTALL_DIR" && npm install --omit=dev --no-audit --no-fund --ignore-scripts ) \
+    || warn "npm install failed - see the error above"
 }
 
 apply_migrations_host() {
   log "Applying database migrations"
-  if ( cd "$INSTALL_DIR" && DB_DIALECT=sqlite SQLITE_PATH="${DATA_DIR}/panel.sqlite" \
-        node scripts/migrate-sqlite.mjs ); then
+  local env_prefix="DB_DIALECT=sqlite SQLITE_PATH=${DATA_DIR}/panel.sqlite"
+  # shellcheck disable=SC2086  # env_prefix — это список VAR=VALUE
+  if ( cd "$INSTALL_DIR" && env $env_prefix node scripts/migrate-sqlite.mjs ); then
     log "Migrations applied"
-  else
-    warn "Migrations failed - run manually: cd $INSTALL_DIR && npm run db:migrate"
+    return 0
   fi
+  warn "Migrations failed without dependencies - installing them and retrying"
+  install_runtime_deps
+  # shellcheck disable=SC2086
+  if ( cd "$INSTALL_DIR" && env $env_prefix node scripts/migrate-sqlite.mjs ); then
+    log "Migrations applied"
+    return 0
+  fi
+  err "Migrations failed - the panel cannot start without a schema.
+Run manually: cd $INSTALL_DIR && npm run db:migrate
+If the disk is full, free some space first."
 }
 
 # ---- вспомогательное: выполнить скрипт панели в её окружении ----
@@ -692,16 +740,17 @@ fi
 ADMIN_CREATED=0
 ADMIN_PASSWORD=""
 NODE_NAME="${NODE_NAME:-local}"
+INSTALL_OK=1
 
 if [[ "$DO_START" -eq 1 ]]; then
-  verify_panel || true
+  verify_panel || INSTALL_OK=0
 
   create_first_admin || true
 
   if [[ "$USE_PROXY" -eq 1 ]]; then
     if [[ -n "$DOMAIN" ]]; then
-      install_nginx || true
-      setup_tls || true
+      install_nginx || INSTALL_OK=0
+      setup_tls || INSTALL_OK=0
     else
       info "No --domain: the panel stays on 127.0.0.1:${PORT} (no reverse proxy)"
     fi
@@ -712,10 +761,16 @@ if [[ "$DO_START" -eq 1 ]]; then
   register_node || true
 fi
 
+if [[ "$INSTALL_OK" -eq 1 ]]; then
+  STATUS_LINE="${GREEN}cardinal-panel ${PANEL_VERSION} installed${NC}"
+else
+  STATUS_LINE="${RED}cardinal-panel ${PANEL_VERSION} installed, BUT NOT WORKING${NC}"
+fi
+
 if [[ "$INSTALL_MODE" == "cardinal" ]]; then
 cat <<EOF
 
-${GREEN}cardinal-panel ${PANEL_VERSION} installed (mode: cardinal)${NC}
+${STATUS_LINE}
 
   Image       : $(command -v cardinal >/dev/null 2>&1 && echo "${IMAGE_TAG:-cardinal-panel:${PANEL_VERSION}}" || echo "n/a")
   Config      : ${CONF_FILE}
@@ -742,7 +797,7 @@ EOF
 else
 cat <<EOF
 
-${GREEN}cardinal-panel ${PANEL_VERSION} installed${NC}
+${STATUS_LINE}
 
   Install dir : ${INSTALL_DIR}
   Data dir    : ${DATA_DIR}
@@ -765,4 +820,17 @@ cat <<EOF
     Stop:    systemctl stop ${SERVICE_NAME}
 
 EOF
+fi
+
+if [[ "$INSTALL_OK" -ne 1 ]]; then
+  cat >&2 <<EOF
+
+${RED}Установка не завершена${NC}
+
+Панель установлена, но не отвечает. Разберитесь по логам:
+  journalctl -u ${SERVICE_NAME} -n 100
+  df -h ${DATA_DIR}
+
+EOF
+  exit 1
 fi

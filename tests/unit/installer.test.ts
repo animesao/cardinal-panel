@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -132,6 +133,51 @@ describe('установщик', () => {
   it('скачивает архив с версией в имени', () => {
     expect(installer).toContain('ARCHIVE="cardinal-panel-${PANEL_VERSION}.tar.gz"');
     expect(installer).toContain('releases/download/v${PANEL_VERSION}');
+  });
+
+  it('проверяет свободное место на диске ДО установки', () => {
+    expect(installer).toContain('check_disk_space');
+    // Проверка должна идти до распаковки и до миграций.
+    const checkIndex = installer.indexOf('\ncheck_disk_space\n');
+    const extractIndex = installer.indexOf('tar -xzf "${TMP_DIR}/${ARCHIVE}"');
+    const migrateIndex = installer.indexOf('apply_migrations_host');
+    expect(checkIndex).toBeGreaterThan(-1);
+    expect(extractIndex).toBeGreaterThan(checkIndex);
+    expect(migrateIndex).toBeGreaterThan(checkIndex);
+  });
+
+  it('не ставит npm-зависимости без нужды', () => {
+    // Миграции SQLite работают на встроенном node:sqlite. npm install
+    // (~300 МБ) нужен только как запасной путь при неудаче.
+    const fn = installer.slice(
+      installer.indexOf('apply_migrations_host() {'),
+      installer.indexOf('# ---- запуск выбранного режима ----'),
+    );
+    const depsIndex = fn.indexOf('install_runtime_deps');
+    const migrateIndex = fn.indexOf('node scripts/migrate-sqlite.mjs');
+    expect(migrateIndex).toBeGreaterThan(-1);
+    // Попытка миграции без зависимостей идёт ПЕРВОЙ.
+    expect(migrateIndex).toBeLessThan(depsIndex);
+  });
+
+  it('кладёт lock-файл в релизный пакет (детерминированный npm ci)', () => {
+    const packager = readFileSync(
+      path.join(ROOT, 'scripts', 'package-release.mjs'),
+      'utf8',
+    );
+    expect(packager).toContain("'package-lock.json'");
+  });
+
+  it('сообщает о неудачной установке и завершается с ненулевым кодом', () => {
+    expect(installer).toContain('INSTALL_OK=0');
+    expect(installer).toContain('BUT NOT WORKING');
+    expect(installer).toMatch(/if \[\[ "\$INSTALL_OK" -ne 1 \]\]; then[\s\S]*exit 1/);
+  });
+
+  it('печатает справку по шапке файла, а не по номерам строк', () => {
+    // Номера строк ломаются при каждой правке шапки.
+    expect(installer).not.toMatch(/--help\|-h\)\s+sed -n/);
+    expect(installer).toContain("awk 'NR==1{next}");
   });
 
   it('сохраняет NEXTAUTH_SECRET при переустановке', () => {
