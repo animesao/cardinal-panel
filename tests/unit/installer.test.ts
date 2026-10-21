@@ -193,6 +193,21 @@ describe('установщик', () => {
     expect(installer).toContain("awk 'NR==1{next}");
   });
 
+  it('останавливает сервис ДО замены файлов', () => {
+    // Иначе процесс работает с удаляемыми чанками .output, падает и
+    // рестартует в недоконченном каталоге.
+    const stopIndex = installer.indexOf('systemctl stop "$SERVICE_NAME"');
+    const removeIndex = installer.indexOf('rm -rf "${INSTALL_DIR}/.output"');
+    expect(stopIndex).toBeGreaterThan(-1);
+    expect(removeIndex).toBeGreaterThan(stopIndex);
+  });
+
+  it('не шумит ошибкой curl при разборе ответа API', () => {
+    // grep -m1 закрывает пайп, curl пишет EPIPE — это видно как
+    // "curl: (23) Failure writing output to destination".
+    expect(installer).toMatch(/releases\/latest" 2>\/dev\/null/);
+  });
+
   it('сохраняет NEXTAUTH_SECRET при переустановке', () => {
     expect(installer).toContain('Keeping the existing NEXTAUTH_SECRET');
   });

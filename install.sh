@@ -295,7 +295,7 @@ Override the threshold with --min-free <MiB> if you know what you are doing."
 if [[ -z "$PANEL_VERSION" ]]; then
   info "Resolving latest release"
   PANEL_VERSION="$(curl -fsSL --connect-timeout 15 --max-time 60 \
-    "https://api.github.com/repos/${REPO}/releases/latest" \
+    "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
     | grep -m1 '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')" || true
   # Ответ API должен быть SemVer. Если это не так — внятная ошибка вместо
   # URL с пробелами, который curl отвергнет.
@@ -328,6 +328,15 @@ fi
 
 log "Installing to $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$CONF_DIR"
+
+# Останавливаем сервис ДО замены файлов. Иначе процесс продолжает работать
+# с удаляемыми чанками .output и падает, а Restart=on-failure заставляет его
+# стартовать в недоконченном каталоге (в логе это выглядит как
+# "Changing to the requested working directory failed" и десятки рестартов).
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+  log "Stopping $SERVICE_NAME before the upgrade"
+  systemctl stop "$SERVICE_NAME" || warn "Could not stop $SERVICE_NAME"
+fi
 
 # Место проверяем после создания каталогов: df должен смотреть на ту же
 # файловую систему, где будет лежать база.
