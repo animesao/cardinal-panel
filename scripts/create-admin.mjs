@@ -18,6 +18,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveSqlitePath, resolveDialect, readPanelEnv } from './lib/panel-env.mjs'
 
 const root = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 
@@ -55,11 +56,15 @@ const passwordHash = `scrypt$${N}$${R}$${P}$${salt}$${hash}`
 const uuid = crypto.randomUUID()
 const now = Math.floor(Date.now() / 1000)
 
-const dialect = String(process.env.DB_DIALECT || 'sqlite').toLowerCase()
+const dialect = resolveDialect()
+
+// Путь к базе: сначала --db, потом SQLITE_PATH из окружения, потом из
+// panel.env (/etc/cardinal-panel/panel.env) — иначе скрипт создал бы
+// админа в ./data/panel.sqlite, а панель читает /var/lib/cardinal-panel.
+const dbPath = resolveSqlitePath(argv.db)
 
 async function runSqlite() {
   const { DatabaseSync } = await import('node:sqlite')
-  const dbPath = path.resolve(root, String(process.env.SQLITE_PATH || './data/panel.sqlite'))
   if (!fs.existsSync(dbPath)) {
     console.error(`база не найдена: ${dbPath} — сначала выполните "npm run db:migrate"`)
     process.exit(1)
@@ -82,12 +87,14 @@ async function runSqlite() {
 
 async function runMysql() {
   const mysql = (await import('mysql2/promise')).default
+  // Параметры MySQL — из окружения, затем из panel.env.
+  const cfg = { ...readPanelEnv(), ...process.env }
   const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || '',
+    host: cfg.DB_HOST || '127.0.0.1',
+    port: Number(cfg.DB_PORT || 3306),
+    user: cfg.DB_USER || 'root',
+    password: cfg.DB_PASSWORD || '',
+    database: cfg.DB_NAME || '',
   })
   const [found] = await conn.execute('SELECT id, role FROM users WHERE LOWER(email) = ?', [email])
   if (found.length) {

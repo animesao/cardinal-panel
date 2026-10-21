@@ -12,6 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
+import { resolveSqlitePath } from './lib/panel-env.mjs'
 
 const root = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const argv = Object.fromEntries(
@@ -21,7 +22,11 @@ const argv = Object.fromEntries(
   }),
 )
 
-const dbPath = path.resolve(root, argv.db || process.env.SQLITE_PATH || './data/panel.sqlite')
+// Путь к базе: --db, затем SQLITE_PATH из окружения, затем из
+// /etc/cardinal-panel/panel.env. Раньше скрипт писал в ./data/panel.sqlite,
+// а панель читает /var/lib/cardinal-panel/panel.sqlite — миграции applied
+// оказывались не в той базе.
+const dbPath = resolveSqlitePath(argv.db)
 const dir = path.resolve(root, argv.dir || './server/db/migrations/sqlite')
 
 const journalPath = path.join(dir, 'meta', '_journal.json')

@@ -193,6 +193,28 @@ describe('установщик', () => {
     expect(installer).toContain("awk 'NR==1{next}");
   });
 
+  it('скрипты панели берут путь к БД из panel.env', () => {
+    // Раньше create-admin и migrate-sqlite писали в ./data/panel.sqlite,
+    // а панель читает /var/lib/cardinal-panel/panel.sqlite: админ создавался
+    // не в той базе, и вход не работал.
+    for (const script of [
+      'scripts/create-admin.mjs',
+      'scripts/migrate-sqlite.mjs',
+      'scripts/admin-api-key.mjs',
+    ]) {
+      const source = readFileSync(path.join(ROOT, script), 'utf8');
+      expect(source, `${script} не читает panel.env`).toContain(
+        'lib/panel-env.mjs',
+      );
+    }
+    const helper = readFileSync(
+      path.join(ROOT, 'scripts', 'lib', 'panel-env.mjs'),
+      'utf8',
+    );
+    expect(helper).toContain('/etc/cardinal-panel/panel.env');
+    expect(helper).toContain('resolveSqlitePath');
+  });
+
   it('открывает порты в брандмауэре', () => {
     // Без этого панель настраивается, но недоступна: ufw дропает пакеты,
     // и в браузере «превышено время ожидания ответа» — причину не угадать.

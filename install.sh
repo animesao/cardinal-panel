@@ -673,7 +673,8 @@ apply_migrations_host() {
     return 0
   fi
   err "Migrations failed - the panel cannot start without a schema.
-Run manually: cd $INSTALL_DIR && npm run db:migrate
+Run manually (the script reads ${CONF_FILE} itself):
+  cd $INSTALL_DIR && node scripts/migrate-sqlite.mjs
 If the disk is full, free some space first."
 }
 
@@ -866,7 +867,8 @@ setup_tls() {
 create_first_admin() {
   if [[ -z "$ADMIN_EMAIL" ]]; then
     warn "No --admin-email: the first admin is NOT created."
-    warn "Create it manually: node scripts/create-admin.mjs --email=you@example.com"
+    warn "Create it manually (it uses the panel's own database):"
+    warn "  cd $INSTALL_DIR && node scripts/create-admin.mjs --email=you@example.com"
     return 0
   fi
   log "Creating the first admin: $ADMIN_EMAIL"
@@ -875,7 +877,7 @@ create_first_admin() {
   local out
   if ! out="$(run_in_panel scripts/create-admin.mjs --email="$ADMIN_EMAIL" --name="admin" 2>&1)"; then
     warn "Failed to create the admin - run it manually:"
-    warn "  node scripts/create-admin.mjs --email=${ADMIN_EMAIL}"
+    warn "  cd $INSTALL_DIR && node scripts/create-admin.mjs --email=${ADMIN_EMAIL}"
     return 1
   fi
   ADMIN_PASSWORD="$(printf '%s\n' "$out" | sed -n 's/^  пароль:  \([^ ]*\).*/\1/p' | head -n1)"

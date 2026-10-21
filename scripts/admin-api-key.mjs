@@ -15,6 +15,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveSqlitePath, resolveDialect, readPanelEnv } from './lib/panel-env.mjs'
 
 const root = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 
@@ -26,8 +27,8 @@ for (const a of process.argv.slice(2)) {
   else argv[a.slice(2, i)] = a.slice(i + 1)
 }
 
-const dialect = String(process.env.DB_DIALECT || 'sqlite').toLowerCase()
-const sqlitePath = path.resolve(root, String(process.env.SQLITE_PATH || './data/panel.sqlite'))
+const dialect = resolveDialect()
+const sqlitePath = resolveSqlitePath()
 
 function hashApiToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex')
@@ -86,12 +87,13 @@ async function runSqlite() {
 
 async function runMysql() {
   const mysql = (await import('mysql2/promise')).default
+  const cfg = { ...readPanelEnv(), ...process.env }
   const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || '',
+    host: cfg.DB_HOST || 'localhost',
+    port: Number(cfg.DB_PORT || 3306),
+    user: cfg.DB_USER || 'root',
+    password: cfg.DB_PASSWORD || '',
+    database: cfg.DB_NAME || '',
   })
   try {
     if (argv.revoke) {

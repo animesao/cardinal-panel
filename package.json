@@ -2,7 +2,7 @@
   "name": "cardinal-panel",
   "type": "module",
   "private": true,
-  "version": "0.5.3",
+  "version": "0.5.4",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
