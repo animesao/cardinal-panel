@@ -193,7 +193,26 @@ describe('установщик', () => {
     expect(installer).toContain("awk 'NR==1{next}");
   });
 
-  it('нормализует --domain (принимает URL, отбрасывает схему и путь)', () => {
+  it('поддерживает несколько имён доступа (--hostname)', () => {
+    // Панель должна открываться и по IP, и по имени: nginx принимает
+    // оба, а имя резолвится через /etc/hosts и mDNS.
+    expect(installer).toContain('--hostname)');
+    expect(installer).toContain('EXTRA_HOSTNAMES');
+    expect(installer).toContain('SERVER_NAMES');
+    expect(installer).toContain('normalize_hostname');
+    // nginx получает список имён одним server_name.
+    expect(installer).toContain('s#__SERVER_NAMES__#${SERVER_NAMES}#g');
+    // Имена попадают в /etc/hosts сервера и в mDNS.
+    expect(installer).toContain('/etc/hosts');
+    expect(installer).toContain('/etc/avahi/hosts');
+    expect(installer).toContain('detect_local_ip');
+  });
+
+  it('не дублирует имена в server_name', () => {
+    expect(installer).toMatch(/case " \$SERVER_NAMES " in/);
+  });
+
+  it('нормализует домен (принимает URL, отбрасывает схему и путь)', () => {
     // Раньше схема попадала в server_name nginx и в NUXT_PANEL_URL
     // («https://http://192.168.0.105»).
     expect(installer).toContain('_d="${DOMAIN#http://}"');

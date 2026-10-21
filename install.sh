@@ -80,6 +80,9 @@ BASE_IMAGE="node:24-alpine"
 #   WINGS_URL   — адрес cardinal-wings на узле (http://host:8080).
 #   WINGS_TOKEN — токен узла (выдаёт установщик wings).
 DOMAIN=""
+# Дополнительные имена, по которым панель доступна наравне с основным:
+# попадают в server_name nginx, в /etc/hosts и (если есть avahi) в mDNS.
+EXTRA_HOSTNAMES=()
 ADMIN_EMAIL=""
 WINGS_URL=""
 WINGS_TOKEN=""
@@ -102,6 +105,7 @@ while [[ $# -gt 0 ]]; do
     --network)   NETWORK_MODE="${2:-}"; shift 2 ;;
     --image-tag) IMAGE_TAG="${2:-}"; shift 2 ;;
     --domain)    DOMAIN="${2:-}"; shift 2 ;;
+    --hostname)  EXTRA_HOSTNAMES+=("${2:-}"); shift 2 ;;
     --admin-email) ADMIN_EMAIL="${2:-}"; shift 2 ;;
     --wings-url) WINGS_URL="${2:-}"; shift 2 ;;
     --wings-token) WINGS_TOKEN="${2:-}"; shift 2 ;;
@@ -142,6 +146,52 @@ fi
 is_ip_address() {
   [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || [[ "$1" == *:* ]]
 }
+
+# Нормализация дополнительного имени: без схемы, без пути и порта.
+normalize_hostname() {
+  local h="$1"
+  h="${h#http://}"
+  h="${h#https://}"
+  h="${h%%/*}"
+  h="${h%%:*}"
+  printf '%s' "$h"
+}
+
+# Локальный адрес машины — для /etc/hosts и mDNS.
+detect_local_ip() {
+  local ip=""
+  if command -v ip >/dev/null 2>&1; then
+    ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')"
+  fi
+  if [[ -z "$ip" ]] && command -v hostname >/dev/null 2>&1; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  printf '%s' "$ip"
+}
+
+LOCAL_IP="$(detect_local_ip)"
+
+# Список имён, по которым отвечает nginx: основной адрес + алиасы.
+SERVER_NAMES="$DOMAIN"
+for _h in "${EXTRA_HOSTNAMES[@]}"; do
+  _h="$(normalize_hostname "$_h")"
+  if [[ -z "$_h" ]]; then
+    continue
+  fi
+  if [[ "$_h" == *[[:space:]]* ]]; then
+    err "--hostname must not contain spaces: '$_h'"
+  fi
+  case " $SERVER_NAMES " in
+    *" $_h "*) ;;
+    *) SERVER_NAMES="${SERVER_NAMES:+$SERVER_NAMES }$_h" ;;
+  esac
+done
+unset _h
+
+if [[ ${#EXTRA_HOSTNAMES[@]} -gt 0 ]]; then
+  log "Panel will answer on: $SERVER_NAMES"
+fi
+
 PUBLIC_SCHEME="http"
 TLS_SKIP_REASON=""
 if [[ -n "$DOMAIN" ]]; then
@@ -630,6 +680,40 @@ run_in_panel() {
   fi
 }
 
+# ---- дополнительные имена: /etc/hosts и mDNS ----
+# Панель должна открываться и по IP, и по имени. Имя должно резолвиться
+# у клиентов: /etc/hosts на самом сервере + mDNS (avahi) для всей сети.
+register_hostnames() {
+  [[ ${#EXTRA_HOSTNAMES[@]} -eq 0 ]] && return 0
+  [[ -n "$LOCAL_IP" ]] || { warn "Cannot detect the local IP - extra hostnames are not registered"; return 1; }
+
+  local name
+  for name in "${EXTRA_HOSTNAMES[@]}"; do
+    name="$(normalize_hostname "$name")"
+    [[ -z "$name" ]] && continue
+
+    # /etc/hosts на сервере: чтобы сам сервер резолвил своё имя.
+    if ! grep -qE "[[:space:]]${name}(\s|$)" /etc/hosts 2>/dev/null; then
+      printf '%s\t%s\n' "$LOCAL_IP" "$name" >> /etc/hosts
+      log "Added '$name' → $LOCAL_IP to /etc/hosts"
+    fi
+
+    # mDNS: имя видно всей локальной сети без настройки DNS на клиентах.
+    if [[ -d /etc/avahi ]]; then
+      if ! grep -qE "[[:space:]]${name}(\s|$)" /etc/avahi/hosts 2>/dev/null; then
+        printf '%s\t%s\n' "$LOCAL_IP" "$name" >> /etc/avahi/hosts
+        log "Published '$name' via mDNS (avahi)"
+      fi
+      if command -v systemctl >/dev/null 2>&1; then
+        systemctl reload avahi-daemon 2>/dev/null || systemctl restart avahi-daemon 2>/dev/null || true
+      fi
+    else
+      info "avahi is not installed - '$name' will not resolve on the LAN automatically."
+      info "Install it (apt-get install -y avahi-daemon) or add '$name' to the hosts file of each client."
+    fi
+  done
+}
+
 # ---- обратный прокси ----
 install_nginx() {
   if ! command -v nginx >/dev/null 2>&1; then
@@ -666,8 +750,8 @@ map $http_upgrade $connection_upgrade {
 }
 EOF
 
-  log "Configuring nginx for $DOMAIN"
-  sed -e "s#__DOMAIN__#${DOMAIN}#g" \
+  log "Configuring nginx for $SERVER_NAMES"
+  sed -e "s#__SERVER_NAMES__#${SERVER_NAMES}#g" \
       -e "s#__PORT__#${PORT}#g" \
       "$template" > "${site_dir}/cardinal-panel.conf"
 
@@ -824,6 +908,7 @@ if [[ "$DO_START" -eq 1 ]]; then
 
   if [[ "$USE_PROXY" -eq 1 ]]; then
     if [[ -n "$DOMAIN" ]]; then
+      register_hostnames || true
       install_nginx || INSTALL_OK=0
       # Неудачный TLS — не «нерабочая установка»: панель живёт по HTTP.
       setup_tls || true

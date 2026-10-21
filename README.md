@@ -371,6 +371,7 @@ curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/instal
 | `--data-dir <путь>` | каталог данных (по умолчанию `/var/lib/cardinal-panel`) |
 | `--port <порт>` | порт панели (по умолчанию 3000) |
 | `--domain <example.com>` | публичный адрес: включает nginx + TLS |
+| `--hostname <имя>` | дополнительное имя доступа (можно указать несколько): попадает в `server_name` nginx, в `/etc/hosts` сервера и в mDNS. Панель открывается и по адресу, и по имени |
 | `--admin-email <email>` | e-mail первого администратора |
 | `--wings-url <url>` | адрес узла `cardinal-wings` (http://host:8080) |
 | `--wings-token <token>` | токен узла (обязателен вместе с `--wings-url`) |
@@ -384,6 +385,31 @@ curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/instal
 
 При переустановке `NEXTAUTH_SECRET` сохраняется — сессии не разламываются,
 а публичный адрес и режим обновляются.
+
+#### Доступ и по адресу, и по имени
+
+Панель принимает **любой** Host (в `next-auth` включён `trustHost`), поэтому
+достаточно сказать nginx, какие имена обслуживать:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/install.sh | sudo bash -s -- \
+  --domain 192.168.0.105 \
+  --hostname panel.local \
+  --hostname cardinal.local
+```
+
+Что делает установщик:
+
+- `server_name` nginx получает все имена: `192.168.0.105 panel.local cardinal.local`;
+- имена добавляются в `/etc/hosts` сервера;
+- если установлен `avahi-daemon` — имена публикуются в **mDNS**, и их видно
+  всей локальной сети без настройки DNS на клиентах (`panel.local`);
+- если `avahi` нет, установщик скажет об этом и подскажет, что добавить
+  в hosts-файл клиента.
+
+Адрес, который панель сообщает сама (`NUXT_PANEL_URL`) и который уходит
+в wings и в OAuth-колбэки, остаётся основным — `--domain`. Алиасы нужны
+только для удобства входа.
 
 После установки:
 
