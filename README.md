@@ -332,6 +332,36 @@ SHA-256, разворачивает в `/opt/cardinal-panel`, создаёт п�
 curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/install.sh | sudo bash
 ```
 
+#### Полная установка одной командой
+
+Чтобы панель была сразу рабочей — с публичным адресом, первым
+администратором и подключённым узлом `cardinal-wings`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/install.sh | sudo bash -s -- \
+  --domain panel.example.com \
+  --admin-email admin@example.com \
+  --wings-url http://10.0.0.5:8080 \
+  --wings-token <токен-из-установщика-wings>
+```
+
+Что делает установщик сверх базовой установки:
+
+1. **публичный адрес** — `--domain` попадает в `NUXT_PANEL_URL`,
+   `NEXTAUTH_URL` и `AUTH_ORIGIN` (без них OAuth-колбэки не работают);
+2. **обратный прокси** — ставит nginx, пишет vhost с заголовками
+   `X-Forwarded-*`, отключает буферизацию (иначе SSE-события приходят
+   пачками с задержкой в минуту) и настраивает WebSocket;
+3. **TLS** — выпускает сертификат Let's Encrypt через certbot и
+   переводит nginx на HTTPS с редиректом;
+4. **первый администратор** — создаётся неинтерактивно, пароль
+   генерируется и печатается один раз в финальном отчёте;
+5. **узел `cardinal-wings`** — заводится через настоящий API панели
+   (`POST /api/admin/nodes`): установщик выпускает временный админ-ключ,
+   регистрирует узел и **сразу отзывает ключ**;
+6. **проверка** — панель опрашивается на `/api/health`, выводится
+   сводка с адресом входа и учётными данными.
+
 Ключи запуска:
 
 | Ключ | Назначение |
@@ -340,22 +370,27 @@ curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/instal
 | `--dir <путь>` | каталог установки (по умолчанию `/opt/cardinal-panel`) |
 | `--data-dir <путь>` | каталог данных (по умолчанию `/var/lib/cardinal-panel`) |
 | `--port <порт>` | порт панели (по умолчанию 3000) |
+| `--domain <example.com>` | публичный адрес: включает nginx + TLS |
+| `--admin-email <email>` | e-mail первого администратора |
+| `--wings-url <url>` | адрес узла `cardinal-wings` (http://host:8080) |
+| `--wings-token <token>` | токен узла (обязателен вместе с `--wings-url`) |
+| `--no-proxy` | не ставить nginx |
+| `--no-tls` | не выпускать сертификат (только HTTP) |
 | `--no-start` | установить, но не запускать |
 | `--uninstall` | снести панель (данные БД сохраняются, `KEEP_DATA=1` — удалить) |
 | `--install-mode <cardinal\|systemd>` | способ развёртывания (по умолчанию `systemd`) |
 | `--network <host\|bridge>` | сетевой режим контейнера в режиме `cardinal` |
 | `--image-tag <тег>` | тег собираемого образа в режиме `cardinal` |
 
+При переустановке `NEXTAUTH_SECRET` сохраняется — сессии не разламываются,
+а публичный адрес и режим обновляются.
+
 После установки:
 
 ```bash
-cd /opt/cardinal-panel && npm run create-admin   # первый админ
-journalctl -u cardinal-panel -f                   # логи
+journalctl -u cardinal-panel -f    # логи
+systemctl status cardinal-panel
 ```
-
-Панель слушает `127.0.0.1:3000` — публичный адрес задаётся в
-`/etc/cardinal-panel/panel.env` (`NUXT_PANEL_URL`) и проксируется
-nginx/Caddy.
 
 ### Развёртывание на runtime cardinal
 

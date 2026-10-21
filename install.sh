@@ -28,6 +28,11 @@
 #
 #   ./install.sh --install-mode cardinal   # развернуть как контейнер на cardinal
 #   ./install.sh --install-mode cardinal --network bridge
+#
+# Полная установка (публичный адрес, админ, узел wings):
+#   ./install.sh --domain panel.example.com \
+#                --admin-email admin@example.com \
+#                --wings-url http://10.0.0.5:8080 --wings-token <token>
 # ============================================================
 set -euo pipefail
 
@@ -61,6 +66,19 @@ NETWORK_MODE="host"
 IMAGE_TAG=""
 BASE_IMAGE="node:24-alpine"
 
+# Полная установка:
+#   DOMAIN      — публичный адрес (https://<domain>); без него панель
+#                 доступна только на 127.0.0.1 и OAuth-колбэки не работают.
+#   ADMIN_EMAIL — e-mail первого администратора.
+#   WINGS_URL   — адрес cardinal-wings на узле (http://host:8080).
+#   WINGS_TOKEN — токен узла (выдаёт установщик wings).
+DOMAIN=""
+ADMIN_EMAIL=""
+WINGS_URL=""
+WINGS_TOKEN=""
+USE_PROXY=1
+USE_TLS=1
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)   VERSION="${2:-}"; shift 2 ;;
@@ -72,7 +90,13 @@ while [[ $# -gt 0 ]]; do
     --install-mode) INSTALL_MODE="${2:-}"; shift 2 ;;
     --network)   NETWORK_MODE="${2:-}"; shift 2 ;;
     --image-tag) IMAGE_TAG="${2:-}"; shift 2 ;;
-    --help|-h)   sed -n '2,34p' "$0"; exit 0 ;;
+    --domain)    DOMAIN="${2:-}"; shift 2 ;;
+    --admin-email) ADMIN_EMAIL="${2:-}"; shift 2 ;;
+    --wings-url) WINGS_URL="${2:-}"; shift 2 ;;
+    --wings-token) WINGS_TOKEN="${2:-}"; shift 2 ;;
+    --no-proxy)  USE_PROXY=0; shift ;;
+    --no-tls)    USE_TLS=0; shift ;;
+    --help|-h)   sed -n '2,42p' "$0"; exit 0 ;;
     *)           err "Unknown option: $1" ;;
   esac
 done
@@ -86,6 +110,16 @@ case "$NETWORK_MODE" in
   host|bridge) ;;
   *) err "--network must be 'host' or 'bridge' (got: $NETWORK_MODE)" ;;
 esac
+
+if [[ -n "$WINGS_URL" && -z "$WINGS_TOKEN" ]]; then
+  err "--wings-url требует --wings-token (без токена узел не подключить)"
+fi
+if [[ -n "$WINGS_TOKEN" && -z "$WINGS_URL" ]]; then
+  err "--wings-token требует --wings-url"
+fi
+if [[ -n "$DOMAIN" && "$USE_TLS" -eq 0 ]]; then
+  warn "TLS выключен: OAuth-колбэки и cookie secure не будут работать"
+fi
 
 # Проверка прав — после разбора аргументов, чтобы --help работал без root.
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
@@ -268,12 +302,32 @@ else
   SQLITE_PATH_IN="${DATA_DIR}/panel.sqlite"
 fi
 
-if [[ -f "$CONF_FILE" ]]; then
-  info "Keeping existing $CONF_FILE"
+# Публичный адрес панели. С доменом — https, без — только localhost
+# (панель слушает 127.0.0.1, наружу её выпускает обратный прокси).
+if [[ -n "$DOMAIN" ]]; then
+  PUBLIC_URL="https://${DOMAIN}"
 else
-  log "Generating $CONF_FILE"
+  PUBLIC_URL="http://localhost:${PORT}"
+fi
+
+# Секрет сохраняется между переустановками: адреса и режим могут
+# меняться, а NEXTAUTH_SECRET — нет (иначе все сессии разломаются).
+SECRET=""
+if [[ -f "$CONF_FILE" ]]; then
+  SECRET="$(sed -n 's/^NEXTAUTH_SECRET="\([^"]*\)".*/\1/p' "$CONF_FILE" | head -n1)"
+  if [[ -n "$SECRET" ]]; then
+    info "Keeping the existing NEXTAUTH_SECRET from $CONF_FILE"
+  else
+    SECRET=""
+  fi
+fi
+if [[ -z "$SECRET" ]]; then
   SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '\n=+/' | cut -c1-40)"
-  cat > "$CONF_FILE" <<EOF
+  log "Generated a new NEXTAUTH_SECRET"
+fi
+
+log "Writing $CONF_FILE"
+cat > "$CONF_FILE" <<EOF
 # cardinal-panel configuration
 # Сгенерировано install.sh. Права: 0600, владелец: ${SERVICE_USER}.
 # Секреты НЕ хранятся в репозитории и НЕ попадают в git.
@@ -281,12 +335,13 @@ else
 # Обязательный секрет NextAuth: подпись сессий и токенов.
 NEXTAUTH_SECRET="${SECRET}"
 
-# Публичный адрес панели (нужен для OAuth-колбэков).
-NUXT_PANEL_URL="http://localhost:${PORT}"
+# Публичный адрес панели (нужен для OAuth-колбэков и для wings:
+# панель отправляет ему свой URL через POST /v1/config).
+NUXT_PANEL_URL="${PUBLIC_URL}"
 
 # Origin для next-auth.
-NEXTAUTH_URL="http://localhost:${PORT}"
-AUTH_ORIGIN="http://localhost:${PORT}/api/auth"
+NEXTAUTH_URL="${PUBLIC_URL}"
+AUTH_ORIGIN="${PUBLIC_URL}/api/auth"
 
 # OAuth-провайдеры можно задать здесь, но проще включить их позже
 # в панели: Admin -> Настройки (значения шифруются в БД).
@@ -305,10 +360,8 @@ TRUSTED_PROXY="127.0.0.1,::1"
 
 DEBUG="false"
 EOF
-  chown "$SERVICE_USER:$SERVICE_USER" "$CONF_FILE"
-  chmod 0600 "$CONF_FILE"
-  log "Generated NEXTAUTH_SECRET in $CONF_FILE"
-fi
+chown "$SERVICE_USER:$SERVICE_USER" "$CONF_FILE"
+chmod 0600 "$CONF_FILE"
 
 # ---- развёртывание: systemd (родной процесс) ----
 deploy_systemd() {
@@ -443,11 +496,206 @@ apply_migrations_host() {
   fi
 }
 
+# ---- вспомогательное: выполнить скрипт панели в её окружении ----
+# В системном режиме — на хосте (с переменными из panel.env),
+# в режиме cardinal — внутри контейнера.
+run_in_panel() {
+  if [[ "$INSTALL_MODE" == "cardinal" ]]; then
+    cardinal exec panel node "$@"
+  else
+    ( set -a; . "${CONF_FILE}"; set +a; cd "$INSTALL_DIR" && node "$@" )
+  fi
+}
+
+# ---- обратный прокси ----
+install_nginx() {
+  if ! command -v nginx >/dev/null 2>&1; then
+    log "Installing nginx"
+    case "${ID:-}" in
+      debian|ubuntu) apt-get update -qq && apt-get install -y -qq nginx ;;
+      fedora|rhel|centos|rocky|almalinux) dnf install -y -q nginx || yum install -y -q nginx ;;
+      arch|manjaro) pacman -Sy --noconfirm nginx ;;
+      alpine) apk add --no-cache nginx ;;
+      *) warn "Cannot install nginx automatically on ${ID:-unknown} - install it yourself and re-run" ; return 1 ;;
+    esac
+  fi
+
+  local template="${INSTALL_DIR}/packaging/nginx/cardinal-panel.conf"
+  [[ -f "$template" ]] || { warn "nginx template not found in the release package: $template"; return 1; }
+
+  # Карта для WebSocket: переменная $connection_upgrade обязана быть
+  # определена в контексте http{}, а не в server{}.
+  local map_dir="/etc/nginx/conf.d"
+  local site_dir="/etc/nginx/sites-available"
+  local link_dir="/etc/nginx/sites-enabled"
+  if [[ ! -d "$site_dir" ]]; then
+    # RHEL/Alpine: всё в conf.d.
+    site_dir="$map_dir"
+    link_dir=""
+  fi
+
+  mkdir -p "$map_dir" "$site_dir"
+  cat > "${map_dir}/cardinal-panel-upgrade-map.conf" <<'EOF'
+# Для WebSocket: Connection: upgrade только когда клиент его просил.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+EOF
+
+  log "Configuring nginx for $DOMAIN"
+  sed -e "s#__DOMAIN__#${DOMAIN}#g" \
+      -e "s#__PORT__#${PORT}#g" \
+      "$template" > "${site_dir}/cardinal-panel.conf"
+
+  if [[ -n "$link_dir" ]]; then
+    mkdir -p "$link_dir"
+    ln -sf "${site_dir}/cardinal-panel.conf" "${link_dir}/cardinal-panel.conf"
+  fi
+
+  nginx -t || { warn "nginx configuration is invalid - fix ${site_dir}/cardinal-panel.conf"; return 1; }
+  systemctl enable nginx >/dev/null 2>&1 || true
+  systemctl reload nginx 2>/dev/null || systemctl restart nginx
+  log "nginx is configured"
+}
+
+setup_tls() {
+  if [[ "$USE_TLS" -eq 0 ]]; then
+    warn "TLS skipped (--no-tls)"
+    return 0
+  fi
+  if ! command -v certbot >/dev/null 2>&1; then
+    log "Installing certbot"
+    case "${ID:-}" in
+      debian|ubuntu) apt-get install -y -qq certbot python3-certbot-nginx ;;
+      fedora|rhel|centos|rocky|almalinux) dnf install -y -q certbot || yum install -y -q certbot ;;
+      alpine) apk add --no-cache certbot py3-certbot-nginx ;;
+      *) warn "Cannot install certbot automatically - install it and re-run"; return 1 ;;
+    esac
+  fi
+  local mail="${ADMIN_EMAIL:-}"
+  if [[ -z "$mail" ]]; then
+    warn "No --admin-email for the ACME registration - TLS skipped"
+    return 1
+  fi
+  log "Requesting a TLS certificate for $DOMAIN"
+  if certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$mail" --redirect; then
+    log "TLS certificate issued"
+  else
+    warn "certbot failed - the panel works over HTTP, but OAuth callbacks need HTTPS"
+    return 1
+  fi
+}
+
+# ---- первый администратор ----
+create_first_admin() {
+  if [[ -z "$ADMIN_EMAIL" ]]; then
+    warn "No --admin-email: the first admin is NOT created."
+    warn "Create it manually: node scripts/create-admin.mjs --email=you@example.com"
+    return 0
+  fi
+  log "Creating the first admin: $ADMIN_EMAIL"
+  # Скрипт вызывается ОДИН раз: он генерирует пароль и печатает его.
+  # Повторный вызов сбросил бы пароль на новый.
+  local out
+  if ! out="$(run_in_panel scripts/create-admin.mjs --email="$ADMIN_EMAIL" --name="admin" 2>&1)"; then
+    warn "Failed to create the admin - run it manually:"
+    warn "  node scripts/create-admin.mjs --email=${ADMIN_EMAIL}"
+    return 1
+  fi
+  ADMIN_PASSWORD="$(printf '%s\n' "$out" | sed -n 's/^  пароль:  \([^ ]*\).*/\1/p' | head -n1)"
+  ADMIN_CREATED=1
+  if [[ -z "$ADMIN_PASSWORD" ]]; then
+    info "Admin created (password was not printed - reset it if needed)"
+  fi
+}
+
+# ---- узел wings ----
+register_node() {
+  if [[ -z "$WINGS_URL" ]]; then
+    info "No --wings-url: the node is not registered (add it in Admin -> Nodes)"
+    return 0
+  fi
+  log "Registering the wings node: $WINGS_URL"
+  local minted key prefix
+  minted="$(run_in_panel scripts/admin-api-key.mjs --email="$ADMIN_EMAIL" --name=installer --scopes=nodes:2 2>/dev/null || true)"
+  key="$(printf '%s\n' "$minted" | sed -n 's/^TOKEN=//p' | head -n1)"
+  prefix="$(printf '%s\n' "$minted" | sed -n 's/^PREFIX=//p' | head -n1)"
+  if [[ -z "$key" ]]; then
+    warn "Could not mint a temporary admin key - register the node in Admin -> Nodes"
+    return 1
+  fi
+
+  local body
+  body="$(printf '{"name":"%s","url":"%s","token":"%s"}' "${NODE_NAME:-local}" "$WINGS_URL" "$WINGS_TOKEN")"
+  local response
+  response="$(curl -fsS -X POST \
+    -H "Authorization: Bearer $key" \
+    -H 'Content-Type: application/json' \
+    -d "$body" \
+    "http://127.0.0.1:${PORT}/api/admin/nodes" 2>&1)" || response=""
+
+  # Ключ больше не нужен — отзываем сразу, даже если запрос не удался.
+  run_in_panel scripts/admin-api-key.mjs --revoke="$prefix" >/dev/null 2>&1 || true
+
+  if printf '%s' "$response" | grep -q '"success":true'; then
+    log "Node registered: $WINGS_URL"
+    if printf '%s' "$response" | grep -q '"wingsSynced":true'; then
+      log "wings confirmed the link"
+    else
+      warn "The node is created, but wings did not confirm the link."
+      warn "Check that the URL and token are correct and that wings is running."
+    fi
+  else
+    warn "Could not register the node: ${response:-no response}"
+    warn "Add it manually in Admin -> Nodes (URL: $WINGS_URL)"
+  fi
+}
+
+# ---- проверка ----
+verify_panel() {
+  local attempt=0
+  while [[ "$attempt" -lt 30 ]]; do
+    if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
+      log "Panel is healthy"
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+  warn "The panel did not answer on http://127.0.0.1:${PORT}/api/health"
+  return 1
+}
+
 # ---- запуск выбранного режима ----
 if [[ "$INSTALL_MODE" == "cardinal" ]]; then
   deploy_cardinal
 else
   deploy_systemd
+fi
+
+# ---- доводка до рабочего состояния ----
+ADMIN_CREATED=0
+ADMIN_PASSWORD=""
+NODE_NAME="${NODE_NAME:-local}"
+
+if [[ "$DO_START" -eq 1 ]]; then
+  verify_panel || true
+
+  create_first_admin || true
+
+  if [[ "$USE_PROXY" -eq 1 ]]; then
+    if [[ -n "$DOMAIN" ]]; then
+      install_nginx || true
+      setup_tls || true
+    else
+      info "No --domain: the panel stays on 127.0.0.1:${PORT} (no reverse proxy)"
+    fi
+  else
+    info "Reverse proxy skipped (--no-proxy)"
+  fi
+
+  register_node || true
 fi
 
 if [[ "$INSTALL_MODE" == "cardinal" ]]; then
@@ -458,19 +706,23 @@ ${GREEN}cardinal-panel ${VERSION} installed (mode: cardinal)${NC}
   Image       : $(command -v cardinal >/dev/null 2>&1 && echo "${IMAGE_TAG:-cardinal-panel:${VERSION}}" || echo "n/a")
   Config      : ${CONF_FILE}
   Compose     : ${COMPOSE_FILE}
-  Panel URL   : http://127.0.0.1:${PORT}
+  Panel URL   : ${PUBLIC_URL}
   Data        : именованный том cardinal "panel-data"
+EOF
+if [[ "$ADMIN_CREATED" -eq 1 ]]; then
+cat <<EOF
 
-Next steps:
-  1. Create the first admin account:
-       cardinal exec panel node scripts/create-admin.mjs
-  2. Put a reverse proxy (nginx/Caddy) in front of 127.0.0.1:${PORT}
-     and set NUXT_PANEL_URL in ${CONF_FILE} to the public address.
-  3. Add the panel node in cardinal-wings (Admin -> Nodes -> Add node).
+  ${YELLOW}Вход в панель${NC}
+    e-mail  : ${ADMIN_EMAIL}
+    пароль  : ${ADMIN_PASSWORD:-<создан, пароль не показан>}
+EOF
+fi
+cat <<EOF
 
-  Status:  cardinal ps
-  Logs:    cardinal logs panel
-  Stop:    cardinal down -f ${COMPOSE_FILE}
+  Управление:
+    Status:  cardinal ps
+    Logs:    cardinal logs panel
+    Stop:    cardinal down -f ${COMPOSE_FILE}
 
 EOF
 else
@@ -481,17 +733,22 @@ ${GREEN}cardinal-panel ${VERSION} installed${NC}
   Install dir : ${INSTALL_DIR}
   Data dir    : ${DATA_DIR}
   Config      : ${CONF_FILE}
-  Panel URL   : http://localhost:${PORT}
+  Panel URL   : ${PUBLIC_URL}
+EOF
+if [[ "$ADMIN_CREATED" -eq 1 ]]; then
+cat <<EOF
 
-Next steps:
-  1. Create the first admin account:
-       cd ${INSTALL_DIR} && npm run create-admin
-  2. Put a reverse proxy (nginx/Caddy) in front of 127.0.0.1:${PORT}
-     and set NUXT_PANEL_URL in ${CONF_FILE} to the public address.
-  3. Add the panel node in cardinal-wings (Admin -> Nodes -> Add node).
+  ${YELLOW}Вход в панель${NC}
+    e-mail  : ${ADMIN_EMAIL}
+    пароль  : ${ADMIN_PASSWORD:-<создан, пароль не показан>}
+EOF
+fi
+cat <<EOF
 
-  Logs:    journalctl -u ${SERVICE_NAME} -f
-  Status:  systemctl status ${SERVICE_NAME}
+  Управление:
+    Logs:    journalctl -u ${SERVICE_NAME} -f
+    Status:  systemctl status ${SERVICE_NAME}
+    Stop:    systemctl stop ${SERVICE_NAME}
 
 EOF
 fi
