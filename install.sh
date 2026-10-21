@@ -503,6 +503,7 @@ run_in_panel() {
   if [[ "$INSTALL_MODE" == "cardinal" ]]; then
     cardinal exec panel node "$@"
   else
+    # shellcheck disable=SC1090  # путь к panel.env задаётся переменной
     ( set -a; . "${CONF_FILE}"; set +a; cd "$INSTALL_DIR" && node "$@" )
   fi
 }

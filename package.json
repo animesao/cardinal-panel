@@ -19,6 +19,7 @@
     "db:check": "node scripts/check-db-connection.mjs",
     "check:imports": "node scripts/check-imports.mjs",
     "lint": "node scripts/check-imports.mjs",
+    "lint:shell": "shellcheck -S warning install.sh",
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
