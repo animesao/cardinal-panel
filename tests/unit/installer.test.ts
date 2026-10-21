@@ -225,6 +225,20 @@ describe('установщик', () => {
     expect(confFileIndex).toBeGreaterThan(parseIndex);
   });
 
+  it('переживает отсутствие systemd (контейнер, chroot)', () => {
+    // Раньше падение systemctl обрывало установку по set -e: миграции не
+    // применялись, панель оставалась без схемы. Контейнерный тест это поймал.
+    expect(installer).toContain('systemd_available()');
+    expect(installer).toContain('systemctl_soft()');
+    // Юнит ставится и включается только при живом systemd.
+    const unitBlock = installer.slice(
+      installer.indexOf('deploy_systemd() {'),
+      installer.indexOf('# ---- развёртывание: контейнер на runtime cardinal ----'),
+    );
+    expect(unitBlock).toContain('if systemd_available; then');
+    expect(unitBlock).not.toMatch(/^\s*systemctl daemon-reload$/m);
+  });
+
   it('идёт в комплекте контейнерный тест установщика', () => {
     // Ловит класс ошибок, невидимых вне Linux: подстановка os-release,
     // битые ссылки в архиве, кодировка, systemd-юнит.

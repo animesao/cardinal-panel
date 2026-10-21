@@ -118,7 +118,7 @@ fi
 log "Запускаем production-сборку"
 export DB_DIALECT=sqlite
 export SQLITE_PATH="$DATA_DIR/panel.sqlite"
-export NEXTAUTH_SECRET="container-test-secret-0123456789abcdef"
+export NEXTAUTH_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '\n=+/' | cut -c1-40)"
 export NEXTAUTH_URL="http://127.0.0.1:$PORT"
 export AUTH_ORIGIN="http://127.0.0.1:$PORT/api/auth"
 export NUXT_PANEL_URL="http://127.0.0.1:$PORT"

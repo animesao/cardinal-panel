@@ -262,6 +262,23 @@ download() {
   return 1
 }
 
+# ---- systemd: не должен быть фатальным ----
+# В контейнере (и в chroot) systemd может не работать: «Failed to connect to
+# bus: Host is down». Раньше падение systemctl обрывало установку по
+# set -e — миграции не применялись, панель оставалась без схемы.
+systemd_available() {
+  command -v systemctl >/dev/null 2>&1 && systemctl is-system-running >/dev/null 2>&1
+}
+
+# systemctl без фатальности: падение — только предупреждение.
+systemctl_soft() {
+  if ! systemctl "$@" >/dev/null 2>&1; then
+    warn "systemctl $* не отработал (systemd может быть недоступен)"
+    return 0
+  fi
+  return 0
+}
+
 # ---- определение ОС / архитектуры ----
 [[ -f /etc/os-release ]] || err "Cannot detect OS - /etc/os-release not found"
 # shellcheck disable=SC1091
@@ -297,9 +314,9 @@ if [[ "$DO_UNINSTALL" -eq 1 ]]; then
   fi
 
   log "Stopping and disabling $SERVICE_NAME"
-  systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
+  systemctl_soft disable --now "$SERVICE_NAME"
   rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
-  systemctl daemon-reload
+  systemctl_soft daemon-reload
 
   # vhost nginx: без этого остаётся прокси на уже несуществующую панель —
   # запросы будут уходить в никуда с 502.
@@ -562,21 +579,30 @@ deploy_systemd() {
       -e "s#^NITRO_PORT=.*#NITRO_PORT=${PORT}#" \
       "$unit_src" > "/etc/systemd/system/${SERVICE_NAME}.service"
   chmod 0644 "/etc/systemd/system/${SERVICE_NAME}.service"
-  systemctl daemon-reload
-  systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+  if systemd_available; then
+    systemctl_soft daemon-reload
+    systemctl_soft enable "$SERVICE_NAME"
+  else
+    warn "systemd is not running here - the unit is installed, but not enabled"
+  fi
 
   # Миграции БД: запускаются на хосте (нужен Node и scripts/).
   apply_migrations_host
 
   if [[ "$DO_START" -eq 1 ]]; then
-    log "Starting $SERVICE_NAME"
-    systemctl restart "$SERVICE_NAME"
-    sleep 2
-    if systemctl is-active --quiet "$SERVICE_NAME"; then
-      log "Service is running"
+    if systemd_available; then
+      log "Starting $SERVICE_NAME"
+      systemctl_soft restart "$SERVICE_NAME"
+      sleep 2
+      if systemctl is-active --quiet "$SERVICE_NAME"; then
+        log "Service is running"
+      else
+        INSTALL_OK=0
+        warn "Service failed to start. Check: journalctl -u ${SERVICE_NAME} -n 50"
+      fi
     else
+      warn "systemd is not running here - the panel was installed, but not started"
       INSTALL_OK=0
-      warn "Service failed to start. Check: journalctl -u ${SERVICE_NAME} -n 50"
     fi
   fi
 }
@@ -833,8 +859,12 @@ EOF
   fi
 
   nginx -t || { warn "nginx configuration is invalid - fix ${site_dir}/cardinal-panel.conf"; return 1; }
-  systemctl enable nginx >/dev/null 2>&1 || true
-  systemctl reload nginx 2>/dev/null || systemctl restart nginx
+  if systemd_available; then
+    systemctl_soft enable nginx
+    systemctl_soft reload nginx
+  else
+    warn "systemd is not running here - nginx was configured, but not reloaded"
+  fi
   log "nginx is configured"
 }
 
