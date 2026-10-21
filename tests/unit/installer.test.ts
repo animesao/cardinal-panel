@@ -193,6 +193,37 @@ describe('установщик', () => {
     expect(installer).toContain("awk 'NR==1{next}");
   });
 
+  it('нормализует --domain (принимает URL, отбрасывает схему и путь)', () => {
+    // Раньше схема попадала в server_name nginx и в NUXT_PANEL_URL
+    // («https://http://192.168.0.105»).
+    expect(installer).toContain('_d="${DOMAIN#http://}"');
+    expect(installer).toContain('_d="${_d#https://}"');
+    expect(installer).toContain('_d="${_d%%/*}"');
+  });
+
+  it('пропускает TLS для IP-адреса (Let\'s Encrypt их не выдаёт)', () => {
+    expect(installer).toContain('is_ip_address');
+    expect(installer).toMatch(/is_ip_address "\$DOMAIN"[\s\S]{0,200}USE_TLS=0/);
+  });
+
+  it('переписывает panel.env на http, если сертификат не выдали', () => {
+    // Иначе NUXT_PANEL_URL остался бы https://, и OAuth-колбэки уходили
+    // бы на несуществующий https.
+    const tlsFn = installer.slice(
+      installer.indexOf('setup_tls() {'),
+      installer.indexOf('# ---- первый администратор ----'),
+    );
+    expect(tlsFn).toContain('PUBLIC_SCHEME="http"');
+    expect(tlsFn).toContain('write_env');
+  });
+
+  it('не считает неудачный TLS нерабочей установкой', () => {
+    // Панель работает и по HTTP; «NOT WORKING» — только если сервис не
+    // поднялся или не отвечает.
+    expect(installer).toContain('setup_tls || true');
+    expect(installer).toContain('install_nginx || INSTALL_OK=0');
+  });
+
   it('останавливает сервис ДО замены файлов', () => {
     // Иначе процесс работает с удаляемыми чанками .output, падает и
     // рестартует в недоконченном каталоге.

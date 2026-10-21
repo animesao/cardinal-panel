@@ -9,11 +9,6 @@ const installer = await readFile(path.join(ROOT, 'install.sh'), 'utf8');
 const defined = [...installer.matchAll(/^([a-z_][a-z0-9_]*)\(\)\s*\{/gm)].map(
   (match) => match[1],
 );
-const called = new Set(
-  [...installer.matchAll(/(?:^|\s|\$\(|;)([a-z_][a-z0-9_]*)\s/gm)].map(
-    (match) => match[1],
-  ),
-);
 
 describe('install.sh', () => {
   it('объявляет ожидаемые функции', () => {
@@ -36,10 +31,16 @@ describe('install.sh', () => {
   });
 
   it('вызывает каждую объявленную функцию', () => {
-    // Функции, которые вызываются только через trap/eval, в этом скрипте
-    // не используются.
+    // Вызов может быть где угодно: в командной подстановке $(f),
+    // внутри [[ ... ]], после pipe — поэтому считаем все вхождения имени,
+    // кроме самого определения.
     for (const name of defined) {
-      expect(called.has(name), `функция ${name} нигде не вызывается`).toBe(true);
+      const hits = [
+        ...installer.matchAll(
+          new RegExp(`(?<![A-Za-z0-9_])${name}(?![A-Za-z0-9_])`, 'g'),
+        ),
+      ];
+      expect(hits.length, `функция ${name} нигде не вызывается`).toBeGreaterThan(1);
     }
   });
 

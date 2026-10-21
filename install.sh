@@ -123,6 +123,36 @@ case "$NETWORK_MODE" in
   *) err "--network must be 'host' or 'bridge' (got: $NETWORK_MODE)" ;;
 esac
 
+# ---- нормализация публичного адреса ----
+# Принимаем и «example.com», и «https://example.com/», и «example.com:8080»:
+# дальше везде используется голый хост. Раньше схема попадала в server_name
+# nginx и в NUXT_PANEL_URL («https://http://192.168.0.105»).
+if [[ -n "$DOMAIN" ]]; then
+  _d="${DOMAIN#http://}"
+  _d="${_d#https://}"
+  _d="${_d%%/*}"     # отбрасываем путь
+  _d="${_d%%:*}"     # отбрасываем порт
+  DOMAIN="$_d"
+  [[ -n "$DOMAIN" ]] || err "--domain is empty after normalization: '${_d}'"
+  [[ "$DOMAIN" != *[[:space:]]* ]] || err "--domain must not contain spaces: '$DOMAIN'"
+  unset _d
+fi
+
+# IP-адрес: Let's Encrypt сертификаты на IP не выдаёт, поэтому TLS не нужен.
+is_ip_address() {
+  [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || [[ "$1" == *:* ]]
+}
+PUBLIC_SCHEME="http"
+if [[ -n "$DOMAIN" ]]; then
+  if is_ip_address "$DOMAIN"; then
+    USE_TLS=0
+    PUBLIC_SCHEME="http"
+    info "$DOMAIN is an IP address - Let's Encrypt does not issue certificates for IPs, TLS is skipped"
+  else
+    PUBLIC_SCHEME="https"
+  fi
+fi
+
 if [[ -n "$WINGS_URL" && -z "$WINGS_TOKEN" ]]; then
   err "--wings-url требует --wings-token (без токена узел не подключить)"
 fi
@@ -367,14 +397,6 @@ else
   SQLITE_PATH_IN="${DATA_DIR}/panel.sqlite"
 fi
 
-# Публичный адрес панели. С доменом — https, без — только localhost
-# (панель слушает 127.0.0.1, наружу её выпускает обратный прокси).
-if [[ -n "$DOMAIN" ]]; then
-  PUBLIC_URL="https://${DOMAIN}"
-else
-  PUBLIC_URL="http://localhost:${PORT}"
-fi
-
 # Секрет сохраняется между переустановками: адреса и режим могут
 # меняться, а NEXTAUTH_SECRET — нет (иначе все сессии разломаются).
 SECRET=""
@@ -391,8 +413,24 @@ if [[ -z "$SECRET" ]]; then
   log "Generated a new NEXTAUTH_SECRET"
 fi
 
-log "Writing $CONF_FILE"
-cat > "$CONF_FILE" <<EOF
+# Публичный адрес панели. С доменом — по схеме (https, если сертификат
+# получен), без домена — только localhost (панель слушает 127.0.0.1,
+# наружу её выпускает обратный прокси).
+public_url() {
+  if [[ -n "$DOMAIN" ]]; then
+    printf '%s://%s' "$PUBLIC_SCHEME" "$DOMAIN"
+  else
+    printf 'http://localhost:%s' "$PORT"
+  fi
+}
+
+# Запись panel.env. Вызывается повторно, если TLS не удался и схема
+# меняется на http.
+write_env() {
+  local url
+  url="$(public_url)"
+  log "Writing $CONF_FILE (panel URL: $url)"
+  cat > "$CONF_FILE" <<EOF
 # cardinal-panel configuration
 # Сгенерировано install.sh. Права: 0600, владелец: ${SERVICE_USER}.
 # Секреты НЕ хранятся в репозитории и НЕ попадают в git.
@@ -402,11 +440,11 @@ NEXTAUTH_SECRET="${SECRET}"
 
 # Публичный адрес панели (нужен для OAuth-колбэков и для wings:
 # панель отправляет ему свой URL через POST /v1/config).
-NUXT_PANEL_URL="${PUBLIC_URL}"
+NUXT_PANEL_URL="${url}"
 
 # Origin для next-auth.
-NEXTAUTH_URL="${PUBLIC_URL}"
-AUTH_ORIGIN="${PUBLIC_URL}/api/auth"
+NEXTAUTH_URL="${url}"
+AUTH_ORIGIN="${url}/api/auth"
 
 # OAuth-провайдеры можно задать здесь, но проще включить их позже
 # в панели: Admin -> Настройки (значения шифруются в БД).
@@ -425,8 +463,11 @@ TRUSTED_PROXY="127.0.0.1,::1"
 
 DEBUG="false"
 EOF
-chown "$SERVICE_USER:$SERVICE_USER" "$CONF_FILE"
-chmod 0600 "$CONF_FILE"
+  chown "$SERVICE_USER:$SERVICE_USER" "$CONF_FILE"
+  chmod 0600 "$CONF_FILE"
+}
+
+write_env
 
 # ---- развёртывание: systemd (родной процесс) ----
 deploy_systemd() {
@@ -661,10 +702,20 @@ setup_tls() {
   log "Requesting a TLS certificate for $DOMAIN"
   if certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$mail" --redirect; then
     log "TLS certificate issued"
-  else
-    warn "certbot failed - the panel works over HTTP, but OAuth callbacks need HTTPS"
-    return 1
+    PUBLIC_SCHEME="https"
+    return 0
   fi
+  # Сертификат не выдали — панель продолжает работать по HTTP. Схему в
+  # panel.env меняем на http, иначе OAuth-колбэки уйдут на https и
+  # сломаются.
+  warn "certbot failed - the panel keeps working over HTTP, but OAuth"
+  warn "callbacks need HTTPS (check that DNS for $DOMAIN points to this host)"
+  PUBLIC_SCHEME="http"
+  write_env
+  if [[ "$INSTALL_MODE" == "systemd" ]]; then
+    systemctl restart "$SERVICE_NAME" >/dev/null 2>&1 || true
+  fi
+  return 1
 }
 
 # ---- первый администратор ----
@@ -768,7 +819,8 @@ if [[ "$DO_START" -eq 1 ]]; then
   if [[ "$USE_PROXY" -eq 1 ]]; then
     if [[ -n "$DOMAIN" ]]; then
       install_nginx || INSTALL_OK=0
-      setup_tls || INSTALL_OK=0
+      # Неудачный TLS — не «нерабочая установка»: панель живёт по HTTP.
+      setup_tls || true
     else
       info "No --domain: the panel stays on 127.0.0.1:${PORT} (no reverse proxy)"
     fi
@@ -793,7 +845,7 @@ ${STATUS_LINE}
   Image       : $(command -v cardinal >/dev/null 2>&1 && echo "${IMAGE_TAG:-cardinal-panel:${PANEL_VERSION}}" || echo "n/a")
   Config      : ${CONF_FILE}
   Compose     : ${COMPOSE_FILE}
-  Panel URL   : ${PUBLIC_URL}
+  Panel URL   : $(public_url)
   Data        : именованный том cardinal "panel-data"
 EOF
 if [[ "$ADMIN_CREATED" -eq 1 ]]; then
@@ -820,7 +872,7 @@ ${STATUS_LINE}
   Install dir : ${INSTALL_DIR}
   Data dir    : ${DATA_DIR}
   Config      : ${CONF_FILE}
-  Panel URL   : ${PUBLIC_URL}
+  Panel URL   : $(public_url)
 EOF
 if [[ "$ADMIN_CREATED" -eq 1 ]]; then
 cat <<EOF
