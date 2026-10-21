@@ -71,6 +71,24 @@ test.describe('панель', () => {
     expect(body.user).toBeUndefined();
   });
 
+  test('принимает запросы с чужим Host (алиас без DNS)', async ({ request }) => {
+    // Панель обслуживает и основной адрес, и алиасы (--hostname).
+    // next-auth работает с trustHost, поэтому Host не сверяется с
+    // NUXT_PANEL_URL — вход не ломается при заходе по имени.
+    const response = await request.get('/api/auth/session', {
+      headers: { Host: 'panel.local' },
+    });
+    expect(response.status()).toBe(200);
+  });
+
+  test('health отвечает и при чужом Host', async ({ request }) => {
+    const response = await request.get('/api/health', {
+      headers: { Host: 'panel.local' },
+    });
+    expect(response.status()).toBe(200);
+    expect((await response.json()).status).toBe('ok');
+  });
+
   test('страница несуществующего сервера не роняет панель', async ({ page }) => {
     await page.goto('/login');
     await page.locator('input[type="email"]').fill(ADMIN_EMAIL);
