@@ -98,6 +98,7 @@ while [[ $# -gt 0 ]]; do
     --version)   PANEL_VERSION="${2:-}"; shift 2 ;;
     --dir)       INSTALL_DIR="${2:-}"; shift 2 ;;
     --data-dir)  DATA_DIR="${2:-}"; shift 2 ;;
+    --conf-dir)  CONF_DIR="${2:-}"; shift 2 ;;
     --port)      PORT="${2:-}"; shift 2 ;;
     --no-start)  DO_START=0; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
@@ -121,6 +122,11 @@ case "$INSTALL_MODE" in
   systemd|cardinal) ;;
   *) err "--install-mode must be 'systemd' or 'cardinal' (got: $INSTALL_MODE)" ;;
 esac
+
+# Пути внутри каталога конфигурации пересчитываем после разбора
+# аргументов: --conf-dir мог поменять сам каталог.
+CONF_FILE="${CONF_DIR}/panel.env"
+COMPOSE_FILE="${CONF_DIR}/cardinal.toml"
 
 case "$NETWORK_MODE" in
   host|bridge) ;;
@@ -294,13 +300,24 @@ if [[ "$DO_UNINSTALL" -eq 1 ]]; then
   systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
   rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
   systemctl daemon-reload
-  if [[ "${KEEP_DATA:-0}" != "1" ]]; then
-    warn "Removing $INSTALL_DIR and $DATA_DIR"
-    rm -rf "$INSTALL_DIR" "$DATA_DIR"
-  else
-    info "Keeping $DATA_DIR (KEEP_DATA=1)"
+
+  # vhost nginx: без этого остаётся прокси на уже несуществующую панель —
+  # запросы будут уходить в никуда с 502.
+  if [[ -f /etc/nginx/sites-available/cardinal-panel.conf ]]; then
+    log "Removing the nginx vhost"
+    rm -f /etc/nginx/sites-available/cardinal-panel.conf
+    rm -f /etc/nginx/sites-enabled/cardinal-panel.conf
+    nginx -t >/dev/null 2>&1 && systemctl reload nginx 2>/dev/null || true
   fi
-  log "Uninstalled. Secrets in $CONF_FILE were left in place."
+  rm -f /etc/nginx/conf.d/cardinal-panel-upgrade-map.conf
+
+  if [[ "${KEEP_DATA:-0}" == "1" ]]; then
+    info "Keeping $DATA_DIR (KEEP_DATA=1) — the database and backups survive"
+  else
+    warn "Removing $INSTALL_DIR and $DATA_DIR (keep them with KEEP_DATA=1)"
+    rm -rf "$INSTALL_DIR" "$DATA_DIR"
+  fi
+  log "Uninstalled. Secrets in $CONF_FILE were left in place (delete the directory yourself if needed)."
   exit 0
 fi
 

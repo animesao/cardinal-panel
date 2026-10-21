@@ -102,3 +102,29 @@ jobs:
           path: release/
           retention-days: 7
           if-no-files-found: error
+
+  # Прогон установщика в контейнере с ubuntu:24.04 — та же среда, где
+  # панель живёт у пользователя. Ловит класс ошибок, невидимых вне Linux:
+  # подстановка /etc/os-release (Version из os-release затирала версию
+  # панели), битые ссылки в архиве, кодировка скрипта, systemd-юнит,
+  # права и пути. Все эти баги находились только на живой машине.
+  install-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - name: собрать релизный пакет (его качает установщик)
+        run: npm run build && npm run release:package
+
+      - name: собрать образ для проверки установщика
+        run: docker build -f tests/install/Dockerfile -t panel-install-test .
+
+      - name: прогнать установщик в контейнере
+        run: docker run --rm panel-install-test

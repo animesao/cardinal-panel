@@ -215,6 +215,29 @@ describe('установщик', () => {
     expect(helper).toContain('resolveSqlitePath');
   });
 
+  it('поддерживает --conf-dir (нужен для тестов и нестандартных раскладок)', () => {
+    expect(installer).toContain('--conf-dir)');
+    // Пути внутри каталога конфигурации должны пересчитываться после
+    // разбора аргументов, иначе --conf-dir не подействует.
+    const confFileIndex = installer.lastIndexOf('CONF_FILE="${CONF_DIR}/panel.env"');
+    const parseIndex = installer.indexOf('--conf-dir)');
+    expect(parseIndex).toBeGreaterThan(-1);
+    expect(confFileIndex).toBeGreaterThan(parseIndex);
+  });
+
+  it('идёт в комплекте контейнерный тест установщика', () => {
+    // Ловит класс ошибок, невидимых вне Linux: подстановка os-release,
+    // битые ссылки в архиве, кодировка, systemd-юнит.
+    const run = readFileSync(
+      path.join(ROOT, 'tests', 'install', 'run.sh'),
+      'utf8',
+    );
+    expect(run).toContain('unset VERSION');
+    expect(run).toContain('tar -tvzf');
+    expect(run).toContain('systemd-analyze verify');
+    expect(run).toContain('/api/health');
+  });
+
   it('открывает порты в брандмауэре', () => {
     // Без этого панель настраивается, но недоступна: ufw дропает пакеты,
     // и в браузере «превышено время ожидания ответа» — причину не угадать.

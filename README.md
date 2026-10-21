@@ -1,5 +1,9 @@
 # Cardinal Panel — панель управления игровыми серверами на cardinal
 
+[![version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](https://github.com/animesao/cardinal-panel/releases)
+[![license](https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square)](LICENSE)
+[![node](https://img.shields.io/badge/node-24%2B-00ADD8?style=flat-square&logo=node.js)](https://nodejs.org)
+
 Nuxt 4 + MySQL (Drizzle). Панель не управляет контейнерами напрямую:
 рантайм — **[cardinal](https://github.com/animesao/cardinal)**
 (лёгкая daemonless-замена Docker), агент на каждой ноде —
@@ -18,7 +22,32 @@ Nuxt 4 + MySQL (Drizzle). Панель не управляет контейне�
 wings резолвит сам, поэтому панель не хранит случайные ID и переживает
 `reinstall` без миграций (см. `resolve.go` в cardinal-wings).
 
-## Быстрый старт
+## Установка
+
+Готовая панель ставится одной командой — установщик сам скачивает релиз,
+проверяет SHA-256, генерирует секреты, применяет миграции, поднимает
+systemd-юнит и nginx:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/install.sh | sudo bash
+```
+
+Полная установка — с публичным адресом, первым администратором и
+подключённым узлом wings:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/install.sh | sudo bash -s -- \
+  --domain panel.example.com \
+  --hostname panel.local \
+  --admin-email admin@example.com \
+  --wings-url http://10.0.0.5:8080 \
+  --wings-token <токен-из-установщика-wings>
+```
+
+Подробности, все ключи и разбор режимов — в
+**[документации по установке](docs/INSTALL.md)**.
+
+## Быстрый старт из исходников
 
 ```bash
 npm install
@@ -540,3 +569,27 @@ GitHub Releases:
 ```bash
 npm run release:package   # → release/
 ```
+
+## Документация
+
+Полная документация — в [`docs/`](docs/README.md):
+
+| Документ | О чём |
+|---|---|
+| [Установка](docs/INSTALL.md) | Быстрая и полная установка, все ключи, режимы, публичный адрес, имена доступа |
+| [Обновление](docs/UPGRADE.md) | Обновление, откат, миграции базы |
+| [Настройка](docs/CONFIGURE.md) | Переменные окружения, настройки в панели, узлы wings, API-ключи |
+| [Эксплуатация](docs/OPERATIONS.md) | systemd, логи, бэкапы и восстановление, мониторинг, регулярные задачи |
+| [Проблемы](docs/TROUBLESHOOTING.md) | Симптом → диагностика → причина → решение |
+| [API](docs/API.md) | HTTP API панели |
+| [Разработка](docs/DEVELOPMENT.md) | Запуск, проверки, структура, релизный процесс |
+| [Безопасность](SECURITY.md) | Модель безопасности, хранение секретов, сообщение об уязвимости |
+
+## Участие в проекте
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — как готовить изменения
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — правила общения
+- [SECURITY.md](SECURITY.md) — как сообщить об уязвимости
+- [CHANGELOG.md](CHANGELOG.md) — история изменений
+
+Лицензия — [Apache-2.0](LICENSE).
