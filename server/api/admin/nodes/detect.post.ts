@@ -6,7 +6,8 @@
 import { getDb } from '../../../db'
 import { nodes } from '../../../db/schema'
 import { eq } from 'drizzle-orm'
-import { assertNodeUrl, fetchNodeResources } from '../../../utils/wings'
+import { fetchNodeResources } from '../../../utils/wings'
+import { assertNodeUrl } from '../../../utils/node-url'
 import { requireAdmin } from '../../../utils/admin'
 
 export default defineEventHandler(async (event) => {
@@ -22,7 +23,7 @@ export default defineEventHandler(async (event) => {
     }
     node = rows[0]
   } else {
-    const url = assertNodeUrl(body?.url)
+    const url = await assertNodeUrl(body?.url)
     const token = String(body?.token || '')
     if (!token) throw createError({ statusCode: 400, message: 'Токен обязателен' })
     node = { url, token }

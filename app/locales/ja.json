@@ -755,7 +755,8 @@
     "tabAllocs": "アロケーション",
     "tabInfo": "情報",
     "tokenKeepHint": "（空欄のままにすると保持）",
-    "wingsUrl": "Wings URL"
+    "wingsUrl": "Wings URL",
+    "wingsUrlHint": "プライベートアドレス: ノードのサブネットを NODE_TRUSTED_CIDRS（パネル env）に追加してください"
   },
   "usersAdmin": {
     "accountCreated": "アカウントを作成しました",

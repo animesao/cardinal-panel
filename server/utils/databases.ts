@@ -9,7 +9,7 @@
 //   БД s<serverId>_<rand6>, пользователь u_<rand12>, пароль 24 символа.
 import mysql from 'mysql2/promise'
 import crypto from 'node:crypto'
-import { isPrivateHost } from './wings'
+import { isPrivateHost } from './node-url'
 
 const ident = (s: string) => String(s).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 48)
 

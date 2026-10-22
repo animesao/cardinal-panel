@@ -28,6 +28,7 @@
             placeholder="http://localhost:8081"
             class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-white/25 focus:outline-none focus:border-emerald-300/40"
           />
+          <p class="text-white/30 text-xs mt-1">{{ $t('nodes.wingsUrlHint') }}</p>
         </div>
 
         <div>

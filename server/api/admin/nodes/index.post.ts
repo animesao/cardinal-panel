@@ -3,7 +3,8 @@
 // (POST /v1/config: panel_url + токен для SFTP-проверок и колбэков бэкапов).
 import { getDb, insertAndGetId } from '../../../db'
 import { nodes } from '../../../db/schema'
-import { wingsFetch, assertNodeUrl } from '../../../utils/wings'
+import { wingsFetch } from '../../../utils/wings'
+import { assertNodeUrl } from '../../../utils/node-url'
 import { requireAdmin } from '../../../utils/admin'
 
 export default defineEventHandler(async (event) => {
@@ -15,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const { name, token, locationId, memory, disk, swap } = body
   const databaseHostId = body?.databaseHostId ?? body?.database_host_id ?? null
-  const url = assertNodeUrl(body?.url)
+  const url = await assertNodeUrl(body?.url)
 
   if (!name || !url || !token) {
     throw createError({

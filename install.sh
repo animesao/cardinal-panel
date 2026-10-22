@@ -556,6 +556,11 @@ NITRO_PORT="${PORT}"
 # X-Forwarded-For только если соединение пришло с одного из них.
 TRUSTED_PROXY="127.0.0.1,::1"
 
+# Доверенные подсети wings-нод (через запятую). Нужны, если нода стоит
+# в локальной сети: без этого внутренний адрес ноды будет отклонён.
+# Пример: NODE_TRUSTED_CIDRS="192.168.0.0/16"
+NODE_TRUSTED_CIDRS=""
+
 DEBUG="false"
 EOF
   chown "$SERVICE_USER:$SERVICE_USER" "$CONF_FILE"

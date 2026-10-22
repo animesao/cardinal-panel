@@ -755,7 +755,8 @@
     "tabAllocs": "Allocations",
     "tabInfo": "Info",
     "tokenKeepHint": "(leave empty to keep)",
-    "wingsUrl": "Wings URL"
+    "wingsUrl": "Wings URL",
+    "wingsUrlHint": "Private Adresse: Das Subnetz des Nodes muss in NODE_TRUSTED_CIDRS (Panel-Env) stehen"
   },
   "usersAdmin": {
     "accountCreated": "Account created",

@@ -755,7 +755,8 @@
     "tabAllocs": "Allocations",
     "tabInfo": "Info",
     "tokenKeepHint": "(leave empty to keep)",
-    "wingsUrl": "Wings URL"
+    "wingsUrl": "Wings URL",
+    "wingsUrlHint": "Adresse privée : le sous-réseau du nœud doit figurer dans NODE_TRUSTED_CIDRS (env du panneau)"
   },
   "usersAdmin": {
     "accountCreated": "Account created",

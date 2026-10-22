@@ -755,7 +755,8 @@
     "tabAllocs": "एलोकेशन",
     "tabInfo": "जानकारी",
     "tokenKeepHint": "(रखने के लिए खाली छोड़ें)",
-    "wingsUrl": "विंग्स URL"
+    "wingsUrl": "विंग्स URL",
+    "wingsUrlHint": "निजी पता: नोड का सबनेट NODE_TRUSTED_CIDRS (पैनल env) में होना चाहिए"
   },
   "usersAdmin": {
     "accountCreated": "खाता बनाया गया",

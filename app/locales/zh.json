@@ -755,7 +755,8 @@
     "tabAllocs": "分配",
     "tabInfo": "信息",
     "tokenKeepHint": "（留空则保持不变）",
-    "wingsUrl": "Wings 地址"
+    "wingsUrl": "Wings 地址",
+    "wingsUrlHint": "私有地址：节点所在子网必须列入 NODE_TRUSTED_CIDRS（面板环境变量）"
   },
   "usersAdmin": {
     "accountCreated": "账户已创建",

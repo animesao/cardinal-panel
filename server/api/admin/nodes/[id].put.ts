@@ -4,7 +4,8 @@
 import { getDb } from '../../../db'
 import { nodes } from '../../../db/schema'
 import { eq } from 'drizzle-orm'
-import { wingsFetch, assertNodeUrl } from '../../../utils/wings'
+import { wingsFetch } from '../../../utils/wings'
+import { assertNodeUrl } from '../../../utils/node-url'
 import { requireAdmin } from '../../../utils/admin'
 
 export default defineEventHandler(async (event) => {
@@ -23,7 +24,7 @@ export default defineEventHandler(async (event) => {
   const db = await getDb()
   const updates: any = {}
   if (name !== undefined) updates.name = name
-  if (body?.url !== undefined) updates.url = assertNodeUrl(body.url)
+  if (body?.url !== undefined) updates.url = await assertNodeUrl(body.url)
   if (token !== undefined && token !== '') updates.token = token
   if (locationId !== undefined) updates.locationId = locationId || null
   if (memory !== undefined) updates.memory = memory

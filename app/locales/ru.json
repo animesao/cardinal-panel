@@ -755,7 +755,8 @@
     "tabAllocs": "Аллокации",
     "tabInfo": "Информация",
     "tokenKeepHint": "(оставь пустым, чтобы не менять)",
-    "wingsUrl": "URL Wings"
+    "wingsUrl": "URL Wings",
+    "wingsUrlHint": "Внутренний адрес: подсеть ноды должна быть в NODE_TRUSTED_CIDRS (env панели)"
   },
   "usersAdmin": {
     "accountCreated": "Аккаунт создан",

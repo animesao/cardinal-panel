@@ -157,55 +157,10 @@ export async function fetchNodeResources(node: any) {
     node: entry.name || null,
   }
 }
-// assertNodeUrl — валидация URL ноды при создании/правке (SSRF-барьер):
-// только http/https, без userinfo в URL, и без приватных/служебных
-// диапазонов. Cloud-metadata (169.254.169.254) админ всё ещё может вбить
-// руками — это его осознанный риск, но опечатки, file/gopher-схемы и
-// обращения во внутреннюю сеть не пройдут.
-export function assertNodeUrl(raw: any): string {
-  const s = String(raw || '').trim()
-  let u: URL
-  try { u = new URL(s) } catch { throw createError({ statusCode: 400, message: 'Некорректный URL ноды' }) }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-    throw createError({ statusCode: 400, message: 'URL ноды: только http(s)' })
-  }
-  if (u.username || u.password) {
-    throw createError({ statusCode: 400, message: 'URL ноды: без логина в адресе' })
-  }
-  if (!u.hostname) throw createError({ statusCode: 400, message: 'Некорректный URL ноды' })
-  // Внутренние адреса: панель не должна ходить в них по произвольному
-  // URL из тела запроса (SSRF во внутреннюю сеть / metadata).
-  if (isPrivateHost(u.hostname)) {
-    throw createError({ statusCode: 400, message: 'URL ноды: внутренний адрес запрещён' })
-  }
-  return s
-}
+// Валидация адреса ноды и проверки private/metadata живут в node-url.ts
+// (server/utils/node-url.ts): модуль без тяжёлых импортов, поэтому
+// правило покрыто юнит-тестами.
 
-// isPrivateHost — хост в приватном/служебном диапазоне.
-export function isPrivateHost(hostname: string): boolean {
-  const h = String(hostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '')
-  if (!h) return true
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true
-  // IPv4
-  const m4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
-  if (m4) {
-    const [a, b] = [Number(m4[1]), Number(m4[2])]
-    if (a === 10 || a === 127 || a === 0) return true
-    if (a === 172 && b >= 16 && b <= 31) return true
-    if (a === 192 && b === 168) return true
-    if (a === 169 && b === 254) return true   // link-local, включая 169.254.169.254
-    if (a === 100 && b >= 64 && b <= 127) return true  // CGNAT
-    if (a >= 224) return true                // multicast + зарезервированные
-    return false
-  }
-  // IPv6
-  if (h === '::1' || h === '::') return true
-  if (h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return true
-  // IPv4-в-IPv6
-  const m46 = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
-  if (m46) return isPrivateHost(m46[1])
-  return false
-}
 
 // usedHostPorts — занятые хост-порты ноды (из листинга контейнеров,
 // формат wings "host:container/proto"). Best effort: что не распарсилось —

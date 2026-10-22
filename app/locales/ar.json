@@ -755,7 +755,8 @@
     "tabAllocs": "التخصيصات",
     "tabInfo": "المعلومات",
     "tokenKeepHint": "(اتركه فارغًا للإبقاء)",
-    "wingsUrl": "رابط Wings"
+    "wingsUrl": "رابط Wings",
+    "wingsUrlHint": "عنوان خاص: يجب أن تكون شبكة العقدة في NODE_TRUSTED_CIDRS (بيئة اللوحة)"
   },
   "usersAdmin": {
     "accountCreated": "تم إنشاء الحساب",
