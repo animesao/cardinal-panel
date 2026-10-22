@@ -143,8 +143,10 @@ export function nodeLanIp(node: any): string {
 export async function fetchNodeResources(node: any) {
   const info: any = await wingsFetch(node, '/v1/system/info')
   const list = Array.isArray(info?.nodes) ? info.nodes : []
-  const entry = list.find((n: any) => n?.name === 'local' && n?.status === 'up')
-    || list.find((n: any) => n?.status === 'up')
+  // wings отдаёт статус "ok" (не "up"), поэтому берём и то, и другое.
+  const alive = (n: any) => n?.status === 'up' || n?.status === 'ok'
+  const entry = list.find((n: any) => n?.name === 'local' && alive(n))
+    || list.find((n: any) => alive(n))
     || list[0]
   if (!entry) throw createError({ statusCode: 502, message: 'Нода не отдала данные' })
   const mb = (b: any) => Math.max(0, Math.floor((Number(b) || 0) / 1048576))

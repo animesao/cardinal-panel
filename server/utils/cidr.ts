@@ -6,37 +6,35 @@
 // поэтому в типовой схеме «панель и нода в одной локальной сети» оператор
 // обязан один раз прописать подсеть в env.
 //
+// Считаем без BigInt: IPv4 помещается в 32-битное число, IPv6 разбирается
+// на восемь 16-битных групп. BigInt-литералы (0n) не поддерживаются
+// целевым es2019 в сборке Nitro и давали предупреждение esbuild.
+//
 // Поддерживаются IPv4 и IPv6, а также IPv4-mapped IPv6 (::ffff:10.0.0.1) —
 // иначе адрес вида ::ffff:192.168.0.1 проскочил бы мимо проверки IPv4.
 
 export interface CidrRange {
-  /** база сети (адрес с обнулёнными битами хоста) */
-  net: bigint
+  /** база сети: число для IPv4, восемь групп для IPv6 */
+  base: number | number[]
   /** длина префикса */
   bits: number
   /** 4 или 6 */
   version: 4 | 6
 }
 
-const IPV4_MAX = 0xffffffffn
-const IPV6_MAX = (1n << 128n) - 1n
-
-/** IPv4 -> число. null, если это не IPv4. */
-export function parseIPv4(ip: string): bigint | null {
+/** IPv4 -> 32-битное число. null, если это не IPv4. */
+export function parseIPv4(ip: string): number | null {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(ip || '').trim())
   if (!m) return null
   const parts = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]
   if (parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) return null
   return (
-    (BigInt(parts[0]!) << 24n) |
-    (BigInt(parts[1]!) << 16n) |
-    (BigInt(parts[2]!) << 8n) |
-    BigInt(parts[3]!)
+    ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0
   )
 }
 
-/** IPv6 -> число. null, если это не IPv6. */
-export function parseIPv6(ip: string): bigint | null {
+/** IPv6 -> восемь 16-битных групп. null, если это не IPv6. */
+export function parseIPv6(ip: string): number[] | null {
   let s = String(ip || '').trim().toLowerCase()
   if (!s.includes(':')) return null
   if (s.startsWith('[') && s.endsWith(']')) s = s.slice(1, -1)
@@ -46,9 +44,7 @@ export function parseIPv6(ip: string): bigint | null {
   if (m4) {
     const v4 = parseIPv4(m4[1]!)
     if (v4 === null) return null
-    const hi = (v4 >> 16n) & 0xffffn
-    const lo = v4 & 0xffffn
-    s = `${s.slice(0, m4.index!)}${hi.toString(16)}:${lo.toString(16)}`
+    s = `${s.slice(0, m4.index!)}${(v4 >>> 16).toString(16)}:${(v4 & 0xffff).toString(16)}`
   }
   const dbl = s.indexOf('::')
   let groups: string[]
@@ -62,16 +58,16 @@ export function parseIPv6(ip: string): bigint | null {
     groups = s.split(':').filter(Boolean)
   }
   if (groups.length !== 8) return null
-  let out = 0n
+  const out: number[] = []
   for (const g of groups) {
     if (!/^[0-9a-f]{1,4}$/.test(g)) return null
-    out = (out << 16n) | BigInt(parseInt(g, 16))
+    out.push(parseInt(g, 16))
   }
   return out
 }
 
-/** Любой IP-адрес -> число. null, если разобрать не удалось. */
-export function parseIp(ip: string): { value: bigint; version: 4 | 6 } | null {
+/** Разбор адреса в общем виде. */
+export function parseIp(ip: string): { value: number | number[]; version: 4 | 6 } | null {
   const v4 = parseIPv4(ip)
   if (v4 !== null) return { value: v4, version: 4 }
   const v6 = parseIPv6(ip)
@@ -81,19 +77,16 @@ export function parseIp(ip: string): { value: bigint; version: 4 | 6 } | null {
 
 /** IPv4-mapped IPv6 (::ffff:10.0.0.1) -> IPv4-строка. */
 export function mappedIPv4(ip: string): string | null {
-  const v6 = parseIPv6(ip)
-  if (v6 === null) return null
-  const top = v6 >> 32n
-  if (top !== 0xffffn) return null
-  const v = v6 & IPV4_MAX
-  return `${Number((v >> 24n) & 0xffn)}.${Number((v >> 16n) & 0xffn)}.${Number((v >> 8n) & 0xffn)}.${Number(v & 0xffn)}`
-}
-
-/** Маска по длине префикса. */
-function maskFor(bits: number, version: 4 | 6): bigint {
-  if (bits <= 0) return 0n
-  const max = version === 4 ? IPV4_MAX : IPV6_MAX
-  return (max << (BigInt(version === 4 ? 32 : 128) - BigInt(bits))) & max
+  const groups = parseIPv6(ip)
+  if (!groups) return null
+  // ::ffff:a.b.c.d -> группы 0..4 = 0, группа 5 = 0xffff, 6 и 7 = a.b.c.d
+  for (let i = 0; i < 5; i++) {
+    if (groups[i] !== 0) return null
+  }
+  if (groups[5] !== 0xffff) return null
+  const hi = groups[6] ?? 0
+  const lo = groups[7] ?? 0
+  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`
 }
 
 /**
@@ -111,37 +104,64 @@ export function parseCidr(spec: string): CidrRange | null {
   if (v4 !== null) {
     const bits = lenPart === null ? 32 : Number(lenPart)
     if (!Number.isInteger(bits) || bits < 0 || bits > 32) return null
-    return { net: v4 & maskFor(bits, 4), bits, version: 4 }
+    return { base: v4, bits, version: 4 }
   }
 
   const v6 = parseIPv6(addr)
   if (v6 !== null) {
     const bits = lenPart === null ? 128 : Number(lenPart)
     if (!Number.isInteger(bits) || bits < 0 || bits > 128) return null
-    return { net: v6 & maskFor(bits, 6), bits, version: 6 }
+    return { base: v6, bits, version: 6 }
   }
 
   return null
+}
+
+/** IPv4-адрес входит в подсеть. */
+function ipv4InCidr(ip: number, base: number, bits: number): boolean {
+  if (bits <= 0) return true
+  const mask = (0xffffffff << (32 - bits)) >>> 0
+  return (((ip & mask) >>> 0) === ((base & mask) >>> 0))
+}
+
+/** IPv6-адрес входит в подсеть (сравнение по 16-битным группам). */
+function ipv6InCidr(ip: number[], base: number[], bits: number): boolean {
+  let remaining = bits
+  for (let i = 0; i < 8 && remaining > 0; i++) {
+    if (remaining >= 16) {
+      if (ip[i] !== base[i]) return false
+      remaining -= 16
+    } else {
+      const mask = (0xffff << (16 - remaining)) & 0xffff
+      if (((ip[i] ?? 0) & mask) !== ((base[i] ?? 0) & mask)) return false
+      remaining = 0
+    }
+  }
+  return true
 }
 
 /** Попадает ли IP-адрес в подсеть. */
 export function ipInCidr(ip: string, cidr: string): boolean {
   const range = parseCidr(cidr)
   if (!range) return false
-  const addr = parseIp(ip)
-  if (!addr) return false
 
-  if (addr.version === range.version) {
-    return (addr.value & maskFor(range.bits, range.version)) === range.net
+  const v4 = parseIPv4(ip)
+  if (v4 !== null) {
+    if (range.version !== 4) return false
+    return ipv4InCidr(v4, range.base as number, range.bits)
   }
-  // IPv4-mapped IPv6 против IPv4-подсети: ::ffff:192.168.0.1 -> 192.168.0.1
-  if (addr.version === 6 && range.version === 4) {
-    const v4 = mappedIPv4(ip)
-    if (!v4) return false
-    const value = parseIPv4(v4)
+
+  const v6 = parseIPv6(ip)
+  if (v6 !== null) {
+    if (range.version === 6) return ipv6InCidr(v6, range.base as number[], range.bits)
+    // IPv4-mapped IPv6 против IPv4-подсети: ::ffff:192.168.0.1 -> 192.168.0.1
+    const mapped = mappedIPv4(ip)
+    if (!mapped) return false
+    const value = parseIPv4(mapped)
     if (value === null) return false
-    return (value & maskFor(range.bits, 4)) === range.net
+    return ipv4InCidr(value, range.base as number, range.bits)
   }
+
   return false
 }
 

@@ -36,9 +36,9 @@ afterEach(() => {
 
 describe('разбор адресов', () => {
   it('читает IPv4', () => {
-    expect(parseIPv4('192.168.0.1')).toBe(3232235521n);
-    expect(parseIPv4('0.0.0.0')).toBe(0n);
-    expect(parseIPv4('255.255.255.255')).toBe(4294967295n);
+    expect(parseIPv4('192.168.0.1')).toBe(3232235521);
+    expect(parseIPv4('0.0.0.0')).toBe(0);
+    expect(parseIPv4('255.255.255.255')).toBe(4294967295);
   });
 
   it('не принимает мусор за IPv4', () => {
@@ -48,9 +48,11 @@ describe('разбор адресов', () => {
   });
 
   it('читает IPv6, включая сжатую запись', () => {
-    expect(parseIPv6('::1')).toBe(1n);
-    expect(parseIPv6('::')).toBe(0n);
-    expect(parseIPv6('fd00::1')).toBe(parseIPv6('fd00:0:0:0:0:0:0:1'));
+    expect(parseIPv6('::1')).toEqual([0, 0, 0, 0, 0, 0, 0, 1]);
+    expect(parseIPv6('::')).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(parseIPv6('fd00::1')).toEqual([
+      0xfd00, 0, 0, 0, 0, 0, 0, 1,
+    ]);
     expect(parseIPv6('fe80::1')).not.toBeNull();
   });
 
