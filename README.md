@@ -1,6 +1,6 @@
 # Cardinal Panel — панель управления игровыми серверами на cardinal
 
-[![version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](https://github.com/animesao/cardinal-panel/releases)
+[![version](https://img.shields.io/badge/version-0.6.4-blue?style=flat-square)](https://github.com/animesao/cardinal-panel/releases)
 [![license](https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square)](LICENSE)
 [![node](https://img.shields.io/badge/node-24%2B-00ADD8?style=flat-square&logo=node.js)](https://nodejs.org)
 

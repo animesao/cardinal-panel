@@ -686,6 +686,73 @@ curl -sS -H "Authorization: Bearer <токен ноды>" http://192.168.0.104:8
 
 ---
 
+## 13. Запись в панель падает: `database or disk is full`
+
+### Симптом
+
+Любое действие, которое пишет в базу, отдаёт 500:
+
+```
+POST /api/admin/blueprints/import 500 (Server Error)
+POST /api/account/logins          500 (Server Error)
+DELETE /api/admin/database-hosts/1 500 (Server Error)
+```
+
+При этом `/api/health` отвечает `status: ok` — чтение из базы работает,
+ломается только запись. В журнале:
+
+```
+cause: Error: database or disk is full
+code: 'ERR_SQLITE_ERROR', errcode: 13
+```
+
+### Диагностика
+
+```bash
+df -h /
+curl -sS http://127.0.0.1:3000/api/health | grep -A3 '"disk"'
+journalctl -u cardinal-panel --since "10 min ago" --no-pager | grep -i 'disk is full' | head
+```
+
+Раздел `disk` в health показывает свободное место на разделе с базой;
+при нехватке статус становится `degraded`.
+
+### Причина
+
+Раздел с базой заполнен. Частые источники на ноде платформы:
+
+- `/root/.cardinal/images` — образы контейнеров (десятки тысяч файлов);
+- `/root/.cardinal/volumes` — тома удалённых контейнеров, они переживают
+  удаление контейнера;
+- журнал systemd (`journalctl --disk-usage`).
+
+### Решение
+
+```bash
+cardinal system prune        # контейнеры, образы и тома (cardinal 2.4.10+)
+cardinal volume prune        # только тома (на старых версиях)
+journalctl --disk-usage
+sudo journalctl --vacuum-size=100M
+sudo apt-get clean && sudo apt-get autoremove -y
+```
+
+Чтобы журнал не разросся обратно:
+
+```bash
+sudo mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nSystemMaxUse=200M\n' | sudo tee /etc/systemd/journald.conf.d/size.conf
+sudo systemctl restart systemd-journald
+```
+
+После освобождения места панель работает сама; перезапуск не обязателен,
+но можно перезапустить для ровного счёта:
+
+```bash
+sudo systemctl restart cardinal-panel
+```
+
+---
+
 ## Панель не открывается с другой машины в сети
 
 Разбираем **по слоям**: DNS → сеть → firewall → nginx → процесс. Останавливайтесь

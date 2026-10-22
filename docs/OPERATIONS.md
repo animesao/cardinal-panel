@@ -371,11 +371,26 @@ curl -sS http://127.0.0.1:3000/api/health
 ```json
 {
   "status": "ok",
-  "version": "0.5.4",
+  "version": "0.6.4",
   "uptimeSeconds": 8123,
   "timestamp": "2026-10-21T12:00:00.000Z",
-  "database": "ok"
+  "database": "ok",
+  "disk": {
+    "freeMb": 8421,
+    "path": "/var/lib/cardinal-panel",
+    "warnMb": 512
+  }
 }
+```
+
+Раздел `disk` — свободное место на разделе с базой. Когда его меньше
+`warnMb` (512 МиБ), `status` становится `degraded`, а в `disk.warning`
+появляется причина. HTTP остаётся 200: панель продолжает отдавать
+страницы, но **запись в БД уже падает** с «database or disk is full».
+Проверяйте это место, а не только код ответа:
+
+```bash
+curl -sS http://127.0.0.1:3000/api/health | grep -A3 '"disk"'
 ```
 
 | Код | Тело | Значит |

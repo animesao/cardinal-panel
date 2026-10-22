@@ -246,7 +246,7 @@ middleware: middleware — единственный барьер, и одна о
 
 | Метод | Путь | Что делает |
 |---|---|---|
-| `GET` | `/api/health` | Живость: `{status, version, uptimeSeconds, timestamp, database}`. 503, если БД недоступна |
+| `GET` | `/api/health` | Живость: `{status, version, uptimeSeconds, timestamp, database, disk}`. 503, если БД недоступна; `status: degraded`, если мало свободного места на разделе с БД |
 | `POST` | `/api/setup/bootstrap` | Первичная настройка (создание первого админа по `PANEL_SETUP_TOKEN`). Только когда админов ещё нет |
 | `*` | `/api/auth/*` | NextAuth: вход, сессия, колбэки OAuth |
 

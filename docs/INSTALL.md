@@ -76,7 +76,7 @@ curl -fsSL https://raw.githubusercontent.com/animesao/cardinal-panel/main/instal
 | `--install-mode <режим>` | `systemd` | `systemd` — родной процесс, `cardinal` — контейнер на cardinal |
 | `--network <режим>` | `host` | Сетевой режим контейнера: `host` или `bridge` |
 | `--image-tag <тег>` | `cardinal-panel:<версия>` | Тег собираемого образа (режим `cardinal`) |
-| `--min-free <МиБ>` | `128` | Минимально свободное место; меньше — установка прервётся |
+| `--min-free <МиБ>` | `256` | Минимально свободное место; меньше — установка прервётся |
 | `--no-proxy` | | Не ставить nginx |
 | `--no-tls` | | Не выпускать сертификат |
 | `--no-start` | | Установить, но не запускать |

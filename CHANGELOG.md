@@ -6,6 +6,40 @@
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-10-22
+
+### Added
+
+- **`/api/health` reports free disk space.** A panel on a full filesystem
+  keeps serving pages, but every write to the database fails with
+  "database or disk is full" - importing a blueprint, signing in, deleting a
+  database host. The health response now always carries a `disk` section
+  (`freeMb`, `path`, `warnMb`) and switches `status` to `degraded` when less
+  than 512 MB are left. The HTTP status stays 200 on purpose: restarting
+  does not help when the disk is full, and monitoring should not take the
+  panel out of rotation for a problem it cannot fix.
+
+### Fixed
+
+- **The installer's free-space check was silently skipped.** It measured the
+  data directory with `df`, but on a fresh install that directory does not
+  exist yet and `df` fails on a missing path, so the check returned early
+  with "Cannot determine free space - skipping the check". The installer now
+  walks up to the nearest existing parent directory, so the check actually
+  runs exactly where it matters.
+- **The `--min-free` default did not match its documentation.** The code
+  used 128 MiB while the help text said 256 MiB. Both are 256 MiB now.
+
+### Documentation
+
+- `/api/health` response, the `--min-free` default, and a new troubleshooting
+  entry covering the "database or disk is full" 500s.
+
+### Tests
+
+- 165 unit tests (was 158): 7 new ones for the disk threshold rule.
+
+
 ## [0.6.3] — 2026-10-22
 
 ### Fixed

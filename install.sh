@@ -91,7 +91,7 @@ USE_TLS=1
 # Минимально свободное место на диске с данными, МБ.
 # Самой панели хватает ~50 МБ (релиз + .output + база); остальное — запас
 # под базу, логи и бэкапы.
-MIN_FREE_MB=128
+MIN_FREE_MB=256
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -389,10 +389,20 @@ install_node() {
 # Проверка ДО установки: без неё установщик падает на середине с
 # «database or disk is full» и оставляет после себя сломанный сервис.
 check_disk_space() {
-  local need_mb="${MIN_FREE_MB:-128}"
+  local need_mb="${MIN_FREE_MB:-256}"
   local avail_mb=""
+  local probe="$DATA_DIR"
+
+  # Каталог данных на свежей установке ещё не создан, а df на
+  # несуществующем пути молчит: проверка молча пропускалась ровно там,
+  # где она нужнее всего. Идём вверх до ближайшего существующего каталога.
+  while [[ ! -d "$probe" ]]; do
+    probe="$(dirname "$probe")"
+    [[ -z "$probe" || "$probe" == "/" ]] && { probe="/"; break; }
+  done
+
   if command -v df >/dev/null 2>&1; then
-    avail_mb="$(df -Pm "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
+    avail_mb="$(df -Pm "$probe" 2>/dev/null | awk 'NR==2 {print $4}')"
   fi
   if [[ -z "$avail_mb" ]]; then
     info "Cannot determine free space - skipping the check"
