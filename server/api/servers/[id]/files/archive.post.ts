@@ -4,6 +4,7 @@
 // рекурсивно (fm/list). Упаковка — stored (без сжатия), без внешних
 // зависимостей. Лимиты: ≤200 файлов, ≤512 МБ суммарно.
 import { requireServer, wingsFetch, containerRef, needPerm } from '../../../../utils/wings'
+import { validateServerFilePath } from '../../../../utils/file-path'
 
 const MAX_FILES = 200
 const MAX_BYTES = 512 * 1024 * 1024
@@ -102,8 +103,14 @@ export default defineEventHandler(async (event) => {
   needPerm(ctx, 'file.archive')
 
   let paths = Array.isArray(body?.paths) ? body.paths : []
-  paths = [...new Set(paths.map((p) => String(p || '')))]
-    .filter((p) => p.startsWith('/') && !p.includes('..') && p.length > 1 && p.length < 512)
+  paths = [...new Set(paths.map((p) => {
+    try {
+      return validateServerFilePath(p)
+    } catch {
+      return null
+    }
+  }))]
+    .filter((p): p is string => !!p && p.length > 1 && p.length < 512)
   if (!paths.length) throw createError({ statusCode: 400, message: 'Нет путей для архива' })
   if (paths.length > MAX_FILES) throw createError({ statusCode: 413, message: `Слишком много путей (максимум ${MAX_FILES})` })
 
@@ -170,10 +177,10 @@ export default defineEventHandler(async (event) => {
   if (!entries.length) throw createError({ statusCode: 404, message: 'Нечего архивировать (файлы не прочитались)' })
 
   const zip = buildZip(entries)
+  const { sanitizeContentDisposition, getFileNameFromPath } = await import('../../../../utils/file-path')
   const singleDir = paths.length === 1 && entries.every((e) => e.name.startsWith(sanitizeArc(paths[0].split('/').pop() || '') + '/'))
-  const fileName = singleDir
-    ? `${sanitizeArc(paths[0].split('/').pop()).slice(0, 100) || 'archive'}.zip`
-    : `archive-${entries.length}-files.zip`
+  const baseName = sanitizeContentDisposition(getFileNameFromPath(paths[0])).slice(0, 100) || 'archive'
+  const fileName = singleDir ? `${baseName}.zip` : `archive-${entries.length}-files.zip`
 
   event.node.res.setHeader('Content-Type', 'application/zip')
   event.node.res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)

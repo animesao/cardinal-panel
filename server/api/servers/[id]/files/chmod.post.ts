@@ -1,6 +1,7 @@
 // @ts-nocheck
 // POST /api/servers/[id]/files/chmod {file, mode} — через wings fm/chmod.
 import { requireServer, wingsFetch, containerRef, needPerm, logActivity } from '../../../../utils/wings'
+import { validateServerFilePath } from '../../../../utils/file-path'
 
 export default defineEventHandler(async (event) => {
   const id = parseInt(event.context.params?.id || '0')
@@ -15,12 +16,15 @@ export default defineEventHandler(async (event) => {
   // а мусор уходит в chmod контейнера.
   const mode = String(body.mode || '')
   if (!/^[0-7]{3,4}$/.test(mode)) throw createError({ statusCode: 400, message: 'Режим: 3-4 восьмеричные цифры (например 644)' })
+  const rawPath = body.path || body.file
+  if (!rawPath) throw createError({ statusCode: 400, message: 'Неверные параметры' })
+  const path = validateServerFilePath(rawPath)
 
   await wingsFetch(node, `/v1/containers/${containerRef(srv.uuid)}/fm/chmod`, {
     method: 'POST',
-    body: { path: body.path || body.file, mode },
+    body: { path, mode },
   })
-  await logActivity(ctx.db, srv.id, ctx.session.user.id, 'file.chmod', `Права ${body.path || body.file} → ${mode}`)
+  await logActivity(ctx.db, srv.id, ctx.session.user.id, 'file.chmod', `Права ${path} → ${mode}`)
 
   return { success: true }
 })

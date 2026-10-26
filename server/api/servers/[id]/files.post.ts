@@ -3,6 +3,7 @@
 // через wings fm/write (base64). Прокси через панель: браузеру не нужен
 // прямой доступ к ноде и CORS.
 import { requireServer, wingsFetch, containerRef, needPerm, logActivity, wingsFileExists } from '../../../utils/wings'
+import { validateServerFilePath, sanitizeFileName } from '../../../utils/file-path'
 
 export default defineEventHandler(async (event) => {
   const id = parseInt(event.context.params?.id || '0')
@@ -16,10 +17,14 @@ export default defineEventHandler(async (event) => {
   const files: Array<{ name: string; data: Buffer }> = []
   for (const field of formData) {
     if (field.name === 'path' || field.name === 'directory') {
-      directory = field.data.toString() || '/'
+      try {
+        directory = validateServerFilePath(field.data.toString() || '/')
+      } catch {
+        directory = '/'
+      }
     }
     if ((field.name === 'file' || field.name === 'files') && field.filename) {
-      files.push({ name: field.filename.split('/').pop() || field.filename, data: field.data })
+      files.push({ name: sanitizeFileName(field.filename.split('/').pop() || field.filename), data: field.data })
     }
   }
   if (!files.length) throw createError({ statusCode: 400, message: 'Нет файлов' })

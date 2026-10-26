@@ -2,15 +2,17 @@
 // POST /api/servers/[id]/files/write {path, content} — запись текста через
 // wings fm/write (контент кодируется в base64 на панели).
 import { requireServer, wingsFetch, containerRef, needPerm, logActivity, wingsFileExists } from '../../../../utils/wings'
+import { validateServerFilePath } from '../../../../utils/file-path'
 
 export default defineEventHandler(async (event) => {
   const id = parseInt(event.context.params?.id || '0')
   const body = await readBody(event)
-  const { path, content } = body
+  const { path: rawPath, content } = body
   const ctx = await requireServer(event, id)
   const { srv, node } = ctx
 
-  if (!id || path === undefined) throw createError({ statusCode: 400, message: 'Неверные параметры' })
+  if (!id || rawPath === undefined) throw createError({ statusCode: 400, message: 'Неверные параметры' })
+  const path = validateServerFilePath(rawPath)
   // Перезапись существующего — file.update, создание нового — file.create.
   needPerm(ctx, (await wingsFileExists(node, containerRef(srv.uuid), String(path))) ? 'file.update' : 'file.create')
 

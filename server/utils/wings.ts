@@ -598,8 +598,15 @@ export function normalizeFiles(fm: any) {
 // server.jar в обход update). Ошибка листинга = считаем новым:
 // избирательный отказ fm/list атакующий вызвать не может, а UX
 // записи в ещё несуществующую папку ломать нельзя.
+import { validateServerFilePath } from './file-path'
+
 export async function wingsFileExists(node: any, ref: string, fullPath: string): Promise<boolean> {
-  const p = String(fullPath || '')
+  let p: string
+  try {
+    p = validateServerFilePath(fullPath)
+  } catch {
+    return false
+  }
   const base = p.split('/').pop() || ''
   if (!base) return false
   const dir = p.slice(0, p.length - base.length).replace(/\/+$/, '') || '/'
