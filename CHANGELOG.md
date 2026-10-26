@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+
+## [0.6.7] - 2026-10-26
+
+### Security
+
+- Hardened file manager: strict path validation, sanitized Content-Disposition, validated filenames on upload, tightened archive paths.
 ## [0.6.6] - 2026-10-26
 
 ### Security
