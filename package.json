@@ -2,7 +2,7 @@
   "name": "cardinal-panel",
   "type": "module",
   "private": true,
-  "version": "0.6.5",
+  "version": "0.6.6",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -38,7 +38,7 @@
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "jsonwebtoken": "^9.0.3",
-    "monaco-editor": "^0.57.0",
+    "monaco-editor": "0.52.2",
     "mysql2": "^3.22.1",
     "next-auth": "^4.24.15",
     "nuxt": "^4.4.2",

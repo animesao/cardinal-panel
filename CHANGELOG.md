@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-26
+
+### Security
+
+- Downgraded `monaco-editor` to `0.52.2` to resolve critical `dompurify` vulnerabilities. Ran `npm audit fix --package-lock-only`.
+
 ## [0.6.5] - 2026-10-26
 
 ### Added
