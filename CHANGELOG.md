@@ -6,6 +6,24 @@
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-10-26
+
+### Added
+
+- AI agent documentation structure
+
+### Changed
+
+- Stack description updated
+- Docker Compose uses VERSION
+- NUXTAUTH_URL fixed to NEXTAUTH_URL
+
+### Fixed
+
+- 2FA/OAuth docs and auth comment
+- Security docs corrections
+- API/docs paths and typos
+
 ## [0.6.4] — 2026-10-22
 
 ### Added

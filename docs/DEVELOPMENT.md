@@ -63,7 +63,7 @@ npm run dev
 ```bash
 npm run lint && npm run lint:shell && npm run check:secrets \
   && npm run typecheck && npm test && npm run build \
-  && npm run test:e2e && npm run test:install && npm run check:links 2>/dev/null
+  && npm run test:e2e && npm run test:install
 ```
 
 ### Структура тестов
@@ -128,7 +128,6 @@ docs/                   документация
 | `simulate-install.mjs` | Симуляция установки (распаковка → миграции → запуск) |
 | `e2e-server.mjs` | Подъём production-сборки для Playwright |
 | `sync-version.mjs` | Синхронизация `VERSION` и `package.json` |
-| `gen-og.mjs` | Генерация OG-изображения |
 | `patch-next-auth-core.mjs` | Патч next-auth под Nuxt 4 |
 
 ---

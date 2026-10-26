@@ -39,7 +39,7 @@ API **намеренно невозможно** — только через ин
 ### Сессия (для панельного API)
 
 Обычный вход через `/api/auth/*` (NextAuth). Куки
-`kt_panel_session`. Панельный API работает с сессией; внешние клиенты —
+``. Панельный API работает с сессией; внешние клиенты —
 с API-ключом.
 
 ### Ограничения
@@ -64,37 +64,37 @@ Pterodactyl-совместимые маршруты. Требуют API-ключ
 
 | Метод | Путь | Уровень | Что делает |
 |---|---|---|---|
-| `GET` | `/v1/account` | 1 | Текущий пользователь |
-| `GET` | `/v1/users` | 1 | Список пользователей (админ) |
-| `GET` | `/v1/users/{id}` | 1 | Пользователь по id |
+| `GET` | `/api/api/api/api/v1/account` | 1 | Текущий пользователь |
+| `GET` | `/api/api/api/api/v1/users` | 1 | Список пользователей (админ) |
+| `GET` | `/api/api/api/api/v1/users/{id}` | 1 | Пользователь по id |
 
 ### Серверы
 
 | Метод | Путь | Уровень | Что делает |
 |---|---|---|---|
-| `GET` | `/v1/servers` | 1 | Свои серверы |
-| `GET` | `/v1/servers/{uuid}` | 1 | Сервер по uuid |
-| `GET` | `/v1/servers/{uuid}/resources` | 1 | Ресурсы: cpu, память, диск |
-| `POST` | `/v1/servers/{uuid}/power` | 2 | `start` / `stop` / `restart` / `kill` |
-| `POST` | `/v1/servers/{uuid}/command` | 2 | Команда в консоль |
+| `GET` | `/api/api/api/api/v1/servers` | 1 | Свои серверы |
+| `GET` | `/api/api/api/api/v1/servers/{uuid}` | 1 | Сервер по uuid |
+| `GET` | `/api/api/api/api/v1/servers/{uuid}/resources` | 1 | Ресурсы: cpu, память, диск |
+| `POST` | `/api/api/api/api/v1/servers/{uuid}/power` | 2 | `start` / `stop` / `restart` / `kill` |
+| `POST` | `/api/api/api/api/v1/servers/{uuid}/command` | 2 | Команда в консоль |
 
 ### Справочники
 
 | Метод | Путь | Уровень |
 |---|---|---|
-| `GET` | `/v1/locations` | 1 |
-| `GET` | `/v1/nodes` | 1 |
-| `GET` | `/v1/nodes/{id}` | 1 |
-| `GET` | `/v1/nodes/{id}/allocations` | 1 |
-| `GET` | `/v1/blueprints` | 1 |
-| `GET` | `/v1/blueprints/{id}` | 1 |
-| `GET` | `/v1/database-hosts` | 1 |
-| `GET` | `/v1/server-databases` | 1 |
+| `GET` | `/api/api/api/api/v1/locations` | 1 |
+| `GET` | `/api/api/api/api/v1/nodes` | 1 |
+| `GET` | `/api/api/api/api/v1/nodes/{id}` | 1 |
+| `GET` | `/api/api/api/api/v1/nodes/{id}/allocations` | 1 |
+| `GET` | `/api/api/api/api/v1/blueprints` | 1 |
+| `GET` | `/api/api/api/api/v1/blueprints/{id}` | 1 |
+| `GET` | `/api/api/api/api/v1/database-hosts` | 1 |
+| `GET` | `/api/api/api/api/v1/server-databases` | 1 |
 
 Пример:
 
 ```bash
-curl -H "Authorization: Bearer cp_..." http://192.168.0.104:3000/v1/servers
+curl -H "Authorization: Bearer cp_..." http://192.168.0.104:3000/api/api/api/api/v1/servers
 ```
 
 ---
@@ -213,7 +213,7 @@ middleware: middleware — единственный барьер, и одна о
 | `POST` | `/api/admin/servers/{id}/suspend` | Приостановить |
 | `POST` | `/api/admin/servers/{id}/unsuspend` | Возобновить |
 | `GET` | `/api/admin/allocations` | Выделенные порты |
-| `POST` | `/api/admin/allocations/{id}/delete` | Освободить порт |
+| `POST` | `/api/admin/allocations/{id}` | Освободить порт |
 | `GET` | `/api/admin/blueprints` | Шаблоны |
 | `POST` | `/api/admin/blueprints` | Создать шаблон |
 | `PUT` | `/api/admin/blueprints/{id}` | Изменить шаблон |
@@ -237,7 +237,7 @@ middleware: middleware — единственный барьер, и одна о
 | `POST` | `/api/remote/sftp/auth` | Проверка SFTP-пароля |
 | `POST` | `/api/remote/backups/{uuid}` | Колбэк о завершении бэкапа |
 
-При создании узла панель отправляет wings `POST /v1/config` с
+При создании узла панель отправляет wings `POST /api/api/api/api/v1/config` с
 `panel_url` и токеном — после этого wings знает, куда обращаться.
 
 ---

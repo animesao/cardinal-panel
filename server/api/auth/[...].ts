@@ -243,7 +243,7 @@ async function buildProviders() {
         if (!found?.passwordHash) verifyPassword(password, DUMMY_HASH)
         if (!ok) return null
         // Второй фактор: пароль верный, дальше решает TOTP.
-        // OAuth-входы 2FA не касается — только credentials.
+        // 2FA проверяется для всех способов входа (см. signIn).
         const trows = await db.select().from(userTotp).where(eq(userTotp.userId, found.id)).limit(1)
         const tfa = trows[0]
         if (tfa?.enabled) {

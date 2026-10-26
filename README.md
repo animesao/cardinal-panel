@@ -4,7 +4,7 @@
 [![license](https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square)](LICENSE)
 [![node](https://img.shields.io/badge/node-24%2B-00ADD8?style=flat-square&logo=node.js)](https://nodejs.org)
 
-Nuxt 4 + MySQL (Drizzle). Панель не управляет контейнерами напрямую:
+Nuxt 4 + SQLite �� ��������� (MySQL �����������), Drizzle ORM. Панель не управляет контейнерами напрямую:
 рантайм — **[cardinal](https://github.com/animesao/cardinal)**
 (лёгкая daemonless-замена Docker), агент на каждой ноде —
 **[cardinal-wings](https://github.com/animesao/cardinal-wings)**
@@ -284,10 +284,9 @@ on-demand (тот же механизм, что SFTP) вместо отказа 
 в приложение-аутентификатор (Google/Microsoft Authenticator, 1Password,
 рядом секрет текстом на случай ручного ввода) → код из приложения → 8 резервных кодов (показываются один раз, каждый
 сгорает после использования). Дальше вход по почте+паролю спрашивает
-второй шаг: код из приложения или резервный код. OAuth-входы (GitHub/
-Google/Discord) 2FA не касается — только credentials. Секрет шифруется
+второй шаг: код из приложения или резервный код. Для аккаунта с включённой 2FA Для аккаунта с включённой 2FA OAuth-вход отклоняется — нужно войти по e-mail и паролю. Секрет шифруется
 AES-256-GCM (`NEXTAUTH_SECRET`), в БД открытого секрета нет. Подбор кода
-режется троттлингом (10 попыток за 5 минут). Потерял телефон и коды —
+режется троттлингом (5 попыток за 5 минут). Потерял телефон и коды —
 проси админа удалить строку из `user_totp` в БД.
 
 ```bash
