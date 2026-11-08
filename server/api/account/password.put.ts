@@ -22,6 +22,6 @@ export default defineEventHandler(async (event) => {
     }
   }
   const next = assertPasswordRules(body?.newPassword)
-  await db.update(users).set({ passwordHash: hashPassword(next) }).where(eq(users.id, session.user.id))
+  await db.update(users).set({ passwordHash: hashPassword(next), updatedAt: new Date() }).where(eq(users.id, session.user.id))
   return { success: true }
 })

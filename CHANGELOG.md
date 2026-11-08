@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-11-08
+
+### Security
+
+- Hardened account password update workflow in `server/api/account/password.put.ts` to touch `updatedAt` timestamp upon password changes.
 
 ## [0.6.7] - 2026-10-26
 
